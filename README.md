@@ -11,7 +11,7 @@ Alternative Spotify players work too, for example
 The app finds whichever one is running.
 
 - **Real facts only.** Facts come from Wikipedia (in your host language, then
-  English) and MusicBrainz. Claude is told to use only those facts. When none
+  English) and MusicBrainz. The AI is told to use only those facts. When none
   are found, the host does a simple intro with no trivia.
 - **No gap.** The break (facts → script → speech) is prepared while the current
   song is still playing.
@@ -30,7 +30,7 @@ The app finds whichever one is running.
                               loop.py ── every N tracks ──► spotify_api.py: GET /me/player/queue
                                   │                              │ next track
                                   │                              ▼
-                                  │      facts.py (Wikipedia, MusicBrainz) → script.py (Claude)
+                                  │   facts.py (Wikipedia, MusicBrainz) → script.py (Claude / Ollama)
                                   │                              → tts.py (Google / Piper) → WAV
                                   ▼
                  ~0.8 s before the song ends: pause → audio.py plays clip → resume
@@ -67,7 +67,9 @@ The app finds whichever one is running.
 
 Requires Linux, Spotify Premium, the Spotify desktop app (or another Spotify
 player), PipeWire/PulseAudio and, on Arch,
-`sudo pacman -S python-gobject gtk4 libadwaita`.
+`sudo pacman -S python-gobject gtk4 libadwaita`. For the AI you need either an
+Anthropic API account with a few dollars of credit (best results) or
+[Ollama](https://ollama.com) with a local model (free).
 
 ```bash
 # the repo is private, so download with the GitHub CLI (gh auth login once)
@@ -83,8 +85,8 @@ run a newer release's `./install.sh`; your settings are kept.
 `./install.sh --uninstall` removes the app but keeps your settings.
 
 Then open **AI Radio Host**. On first launch, a setup wizard walks you through
-the Spotify app and login, the Claude API key and the voice, and saves
-everything for you. You can run it again from Settings → Accounts. The manual
+the Spotify app and login, the AI (a Claude API key, or a local model in
+Ollama) and the voice, and saves everything for you. You can run it again from Settings → Accounts. The manual
 steps below are only needed if you prefer to edit the files yourself.
 
 An installed copy reads `config.toml` and `.env` from `~/.config/ai-radio-host/`.
@@ -198,7 +200,7 @@ To add it to your app launcher:
 |---|---|
 | **On Air** | On/off switch, dry-run switch and language. Shows the current song, the count toward the next break, the next break's status, and recent scripts (▶ replays one). |
 | **Log** | The live log. |
-| **Settings** | Breaks, host personality, model, speech provider, Google budget, and account status (Spotify login button included). Changes apply the next time you go on air. |
+| **Settings** | Breaks, host personality, AI provider (Claude or Ollama) and model, speech provider, Google budget, account status (Spotify login button included), and **Run setup again**. Changes apply the next time you go on air. |
 | **Voices** | Every Google Chirp 3 HD and Piper voice for the chosen language. ▶ plays a sample; tick a voice to use it. |
 
 If you close the window while on air, the app asks whether to keep running in
@@ -236,7 +238,8 @@ backend order and audio command.
 | `radiohost/player.py` | `PlayerControl` interface: MPRIS (any Spotify app), Spotifast CLI, Web API, plus a fallback chain |
 | `radiohost/spotify_api.py` | PKCE login, token refresh, 429 back-off, queue, playback |
 | `radiohost/facts.py` | Wikipedia + MusicBrainz lookups |
-| `radiohost/script.py` | Claude prompt and validation |
+| `radiohost/script.py` | The host prompt; Claude or Ollama; validation |
+| `radiohost/setup_wizard.py` | First-run setup wizard |
 | `radiohost/tts.py` | `TTSProvider`: Google, Piper, fallback, monthly budget |
 | `radiohost/audio.py` | Clip playback (pw-play / paplay / mpv) |
 | `radiohost/loop.py` | State machine: counting, planning, queue checks, the break |
