@@ -200,3 +200,27 @@ def set_env(values: dict[str, str]) -> Path:
     tmp.write_text("\n".join(lines) + "\n")
     tmp.replace(path)
     return path
+
+
+SECRET_KEYS = ("SPOTIFY_CLIENT_ID", "ANTHROPIC_API_KEY", "ANTHROPIC_WORKSPACE_ID",
+               "GOOGLE_APPLICATION_CREDENTIALS")
+
+
+def reset_all() -> list[Path]:
+    """Back to a fresh install: delete config.toml and the Spotify login, and remove the
+    keys from .env. Keeps the Google key file, the Google usage counter and voices."""
+    removed = []
+    for path in {PROJECT_DIR / "config.toml" if DEV else CONFIG_DIR / "config.toml",
+                 CONFIG_DIR / "config.toml", CONFIG_DIR / "spotify_token.json"}:
+        if path.exists():
+            path.unlink()
+            removed.append(path)
+    env = env_file()
+    if env.exists():
+        kept = [line for line in env.read_text().splitlines()
+                if not line.lstrip("# ").strip().startswith(tuple(k + "=" for k in SECRET_KEYS))]
+        env.write_text("\n".join(kept) + "\n")
+        env.chmod(0o600)
+    for key in SECRET_KEYS:
+        os.environ.pop(key, None)
+    return removed

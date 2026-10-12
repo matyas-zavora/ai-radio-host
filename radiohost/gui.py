@@ -308,6 +308,8 @@ class Window(Adw.ApplicationWindow):
             self.sign_caption.set_label(caption)
 
     def _refresh(self) -> bool:
+        if self.app.window is not self:
+            return False  # replaced (e.g. after a reset): stop this timer
         host = self.app.host
         running = self.app.running
         self._update_sign(host, running)
@@ -470,7 +472,30 @@ class Window(Adw.ApplicationWindow):
         g = Adw.PreferencesGroup()
         g.add(save)
         page.add(g)
+
+        reset = Gtk.Button(label="Reset everything and set up again", halign=Gtk.Align.CENTER,
+                           css_classes=["pill", "destructive-action"], margin_top=24)
+        reset.connect("clicked", lambda *_: self._confirm_reset())
+        g = Adw.PreferencesGroup()
+        g.add(reset)
+        page.add(g)
         return page
+
+    def _confirm_reset(self) -> None:
+        dialog = Adw.AlertDialog(
+            heading="Reset everything?",
+            body="This deletes all settings, the Spotify login and the saved keys "
+                 "(Spotify Client ID, Claude key and workspace, Google key path), "
+                 "then starts the setup again.\n\n"
+                 "Kept: your Google key file, this month's Google usage counter and "
+                 "downloaded voices.")
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("reset", "Reset")
+        dialog.set_response_appearance("reset", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+        dialog.connect("response", lambda _d, r: r == "reset" and self.app.reset_all())
+        dialog.present(self)
 
     def _llm_rows(self) -> None:
         local = self.s_llm.items[self.s_llm.get_selected()] == "ollama"
@@ -714,6 +739,7 @@ class App(Adw.Application):
         self.thread: threading.Thread | None = None
         self.held = False
         self.tray = None
+        self.log_handler: GuiLogHandler | None = None
 
     @property
     def running(self) -> bool:
@@ -746,13 +772,32 @@ class App(Adw.Application):
     def do_activate(self):
         if self.window is None:
             self.window = Window(self)
-            handler = GuiLogHandler(self.window.append_log)
-            handler.setLevel(logging.INFO)
-            logging.getLogger().addHandler(handler)
+            if self.log_handler is None:
+                self.log_handler = GuiLogHandler(self.window.append_log)
+                self.log_handler.setLevel(logging.INFO)
+                logging.getLogger().addHandler(self.log_handler)
+            else:
+                self.log_handler.sink = self.window.append_log
         if self.held:
             self.release()
             self.held = False
         self.window.present()
+
+    def reset_all(self) -> None:
+        """Stop the host, wipe settings and keys, and reopen a fresh window (which starts
+        the setup wizard because nothing is configured anymore)."""
+        from .config import reset_all
+        self.stop_host()
+        if self.thread is not None:
+            self.thread.join(timeout=5)
+        self.host = None
+        removed = reset_all()
+        log.info("Reset: removed %s and the saved keys", ", ".join(p.name for p in removed) or "nothing")
+        old = self.window
+        self.window = None
+        self.activate()
+        if old is not None:
+            old.destroy()
 
     def run_in_background(self) -> None:
         if not self.held:

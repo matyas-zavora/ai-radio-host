@@ -200,7 +200,7 @@ To add it to your app launcher:
 |---|---|
 | **On Air** | On/off switch, dry-run switch and language. Shows the current song, the count toward the next break, the next break's status, and recent scripts (▶ replays one). |
 | **Log** | The live log. |
-| **Settings** | Breaks, host personality, AI provider (Claude or Ollama) and model, speech provider, Google budget, account status (Spotify login button included), and **Run setup again**. Changes apply the next time you go on air. |
+| **Settings** | Breaks, host personality, AI provider (Claude or Ollama) and model, speech provider, Google budget, account status (Spotify login button included), **Run setup again**, and at the bottom **Reset everything and set up again**. Reset deletes the settings, the Spotify login and the keys in `.env`, then opens the setup wizard. It keeps your Google key file, the monthly Google usage counter and downloaded voices. Changes apply the next time you go on air. |
 | **Voices** | Every Google Chirp 3 HD and Piper voice for the chosen language. ▶ plays a sample; tick a voice to use it. |
 
 If you close the window while on air, the app asks whether to keep running in
