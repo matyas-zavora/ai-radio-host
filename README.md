@@ -58,15 +58,14 @@ with real facts about the song and the artist. Then the music carries on.
   - Arch: `sudo pacman -S python-gobject gtk4 libadwaita`
   - Fedora: `sudo dnf install python3-gobject gtk4 libadwaita`
   - Debian/Ubuntu: `sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-venv`
-  - macOS: [Homebrew](https://brew.sh) installs all of this for you (see [Install](#install)).
-    The Spotify desktop app is the player there.
+  - macOS ([Homebrew](https://brew.sh)): `brew install python pygobject3 gtk4 libadwaita`.
+    The Spotify desktop app is the player there. The first time, macOS asks whether the
+    terminal may control Spotify: allow it.
 - For the AI, one of:
   - an [Anthropic](https://platform.claude.com) API account with a few dollars of credit (best results), or
   - [Ollama](https://ollama.com) with a local model (free, weaker results)
 
 ## Install
-
-### Linux
 
 ```bash
 git clone https://github.com/matyas-zavora/ai-radio-host.git
@@ -86,23 +85,6 @@ Everything stays in your home folder, and no sudo is needed:
 
 **Update:** `git pull && ./install.sh`. Your settings are kept.
 **Uninstall:** `./install.sh --uninstall`. Your settings in `~/.config/ai-radio-host/` are kept.
-
-### macOS
-
-With [Homebrew](https://brew.sh):
-
-```bash
-brew install matyas-zavora/tap/ai-radio-host
-cp -R "$(brew --prefix)/opt/ai-radio-host/AI Radio Host.app" /Applications/
-```
-
-The second line puts **AI Radio Host** in Applications, Launchpad and Spotlight. You only
-need it once: the app keeps working after updates. The first time, macOS asks whether
-AI Radio Host may control Spotify: allow it.
-
-**Update:** `brew upgrade`. Your settings are kept.
-**Uninstall:** `brew uninstall ai-radio-host` and delete the app from Applications. Your
-settings in `~/.config/ai-radio-host/` are kept.
 
 ## First start
 
@@ -175,11 +157,10 @@ The app itself is free and open source.
 <details>
 <summary><b>Does it work on Windows or macOS?</b></summary>
 
-**macOS: yes, experimentally** (install it [with Homebrew](#macos)). It controls the
-Spotify app through AppleScript, plays the voice with `afplay` and lowers Spotify's own
-volume for the talk-over transition. There's no tray icon on macOS: Cmd+W hides the
-window and the host keeps going, Cmd+Q quits. It's newer than the Linux version, so
-reports are very welcome.
+**macOS: experimentally.** It controls the Spotify app through AppleScript, plays the
+voice with `afplay` and lowers Spotify's own volume for the talk-over transition.
+There's no tray icon on macOS; "Keep Running" minimizes the window to the Dock
+instead. It hasn't been tried on a real Mac much yet, so reports are very welcome.
 
 **Windows: not yet.** If you'd like it, say so in
 [Ideas](https://github.com/matyas-zavora/ai-radio-host/discussions/categories/ideas).
@@ -288,8 +269,7 @@ after 3 minutes and says what to check. Still stuck?
 A tray icon shows the state (grey off, white on air, red talking). Left-click
 opens the window; right-click has On air, Break after this song and Quit. If
 you close the window while on air, the app asks whether to keep running in the
-background. (On macOS there's no tray: Cmd+W or the close button hides the window and
-the host keeps going; the Dock icon or Cmd+Tab brings it back, and Cmd+Q quits.)
+background. (On macOS there's no tray; the window minimizes to the Dock.)
 
 ## Talking over the music
 
@@ -357,7 +337,7 @@ plainer breaks with the occasional made-up detail.
 
 ```mermaid
 flowchart LR
-  A[Spotify app<br>your playlist] --> B[Watch the song<br>MPRIS · AppleScript · Web API]
+  A[Spotify app<br>your playlist] --> B[Watch the song<br>MPRIS · AppleScript<br>· Web API]
   B --> C[Break due:<br>read the queue]
   C --> D[Facts from Wikipedia<br>· MusicBrainz]
   D --> E[Script by<br>Claude · Ollama]
@@ -408,7 +388,7 @@ and [`.env.example`](.env.example) for every option, if you prefer editing files
 
 ## Known limitations
 
-- macOS support is experimental: newer and less tried than Linux. No Windows support.
+- macOS support is experimental and barely tried on a real Mac. No Windows support.
 - Spotify's developer "development mode" allows up to 5 users per developer
   app, which is why every user registers their own (the wizard guides you).
 - The official Spotify desktop app hasn't been tested much yet. Spotifast is
@@ -442,7 +422,6 @@ instead of `~/.config/ai-radio-host/`.
 | `radiohost/ducking.py` | Lowering and restoring the player's volume |
 | `radiohost/audio.py` | Playing the clip |
 | `radiohost/gui.py`, `setup_wizard.py`, `tray.py` | The app, the wizard, the tray icon |
-| `radiohost/macos.py`, `macos/` | macOS: window behaviour, the `.app` bundle (built by the Homebrew formula) |
 | `radiohost/config.py` | Settings and keys |
 
 ## How this was made
