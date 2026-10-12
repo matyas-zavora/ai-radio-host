@@ -102,6 +102,128 @@ Then start your playlist in Spotify and switch **On air** on.
 You can run the wizard again from **Settings → Accounts**, or wipe everything
 with **Reset everything and set up again** at the bottom of Settings.
 
+## FAQ
+
+<details>
+<summary><b>Does it work without Spotify Premium?</b></summary>
+
+No. Spotify only lets Premium accounts use its developer API, which the app
+needs to see your queue (what plays next) and to pause and resume playback.
+
+</details>
+
+<details>
+<summary><b>Why do I need my own Spotify "developer app"?</b></summary>
+
+Spotify limits each developer app to a handful of users unless it's run by an
+established business, so one shared app for everyone isn't possible. Creating
+your own is free and takes a minute, and the [setup wizard](#first-start)
+walks you through it.
+
+</details>
+
+<details>
+<summary><b>How much does it cost?</b></summary>
+
+- **Script writer:** Claude costs about $0.002 per break, roughly a cent per
+  hour of listening with the default settings. A local model through Ollama is free.
+- **Voice:** Piper is free. Google's natural voices are free up to 1 million
+  characters a month (one break is about 350), and the app switches to Piper
+  before you reach that ([details](#google-cloud-tts)).
+
+The app itself is free and open source.
+
+</details>
+
+<details>
+<summary><b>Does it work on Windows or macOS?</b></summary>
+
+Not yet. It's built on Linux desktop technology (GTK4, MPRIS, PulseAudio or
+PipeWire). If you'd like another platform, say so in
+[Ideas](https://github.com/matyas-zavora/ai-radio-host/discussions/categories/ideas).
+
+</details>
+
+<details>
+<summary><b>Does it work when the music plays on my phone or a speaker?</b></summary>
+
+The default **pause** mode should, because the app can control any Spotify
+device through Spotify's API, but this hasn't been tested much yet. The host's
+voice still comes from your computer. **Talking over the music** needs the
+music on the same computer; otherwise that break pauses instead.
+
+</details>
+
+<details>
+<summary><b>Is this allowed by Spotify's rules?</b></summary>
+
+The default setup is built to respect them: the music pauses while the host
+talks (nothing overlaps), and no Spotify data is sent to the AI
+([privacy](#privacy-what-goes-where)). The optional **talk over the music**
+mode goes against Spotify's Developer Policy, which forbids overlapping Spotify
+audio with other audio, so it's off by default and your choice to turn on
+([details](#talking-over-the-music)). This isn't legal advice.
+
+</details>
+
+<details>
+<summary><b>Doesn't the AI make things up?</b></summary>
+
+The AI is told to use only the facts the app found on Wikipedia and
+MusicBrainz, and to do a simple introduction when there are none. Claude
+follows that well; small local models slip more often. It's not perfect, so
+treat the host as a friendly DJ, not an encyclopedia.
+
+</details>
+
+<details>
+<summary><b>Why was a break skipped?</b></summary>
+
+Usually because the queue changed just before the end of the song, the next
+item was a podcast or the queue was empty, the song was too short to prepare
+in time, or the AI or voice service failed. The music always carries on, and
+the **Log** tab says exactly why.
+
+</details>
+
+<details>
+<summary><b>Can I use my own voice, or a famous presenter's?</b></summary>
+
+The app uses stock synthetic voices from Google and Piper; nobody's voice is
+copied. Imitating a real person without their consent isn't supported and
+shouldn't be done. Your own voice is technically possible with a custom-trained
+Piper voice model (advanced, not covered here).
+
+</details>
+
+<details>
+<summary><b>Which languages does the host speak?</b></summary>
+
+English and Czech for now. Want another one? Suggest it in
+[Ideas](https://github.com/matyas-zavora/ai-radio-host/discussions/categories/ideas).
+
+</details>
+
+<details>
+<summary><b>The installer says libadwaita is too old.</b></summary>
+
+The app needs libadwaita 1.6 or newer. Ubuntu 24.04 ships 1.5, so you'd need
+Ubuntu 24.10 or newer, Debian 13, Fedora 41+, Arch, or a similar recent
+distribution.
+
+</details>
+
+<details>
+<summary><b>The Spotify login fails or never finishes.</b></summary>
+
+Almost always the **redirect URI** in your Spotify developer app. It must be
+exactly `http://127.0.0.1:8888/callback` (not `localhost`), with **Web API**
+ticked, and you must log in with your Premium account. The login gives up
+after 3 minutes and says what to check. Still stuck?
+[Ask for help](https://github.com/matyas-zavora/ai-radio-host/issues/new?template=question.yml).
+
+</details>
+
 ## The app
 
 | Tab | What it's for |
