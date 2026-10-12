@@ -72,6 +72,25 @@ class FakeClip:
         return None
 
 
+class FakeDucker:
+    def __init__(self, player, available=True):
+        self.player, self._available = player, available
+        self.events = []
+
+    def available(self):
+        return self._available
+
+    def duck(self, fade_ms):
+        self.events.append(("duck", self.player.pos))
+        return self._available
+
+    def hold(self):
+        pass
+
+    def restore(self, fade_ms):
+        self.events.append(("restore", fade_ms))
+
+
 class InlinePool:
     """Runs submitted work synchronously so the test is deterministic."""
     def submit(self, fn, *args):
@@ -91,6 +110,7 @@ def host(monkeypatch):
     monkeypatch.setattr(loop_mod.time, "sleep", lambda s: None)
     cfg = Config()
     cfg.brk.every_n_tracks = 2
+    cfg.brk.transition = "pause"
     player = FakePlayer()
     spotify = FakeSpotify(player)
     h = RadioHost.__new__(RadioHost)
@@ -104,8 +124,10 @@ def host(monkeypatch):
 
     def generate(nxt, prev):
         h.generated.append(nxt)
-        return Break(nxt, f"intro {nxt.title}", Path("/dev/null"))
+        return Break(nxt, f"intro {nxt.title}", Path("/dev/null"), seconds=20)
     h.generate = generate
+    h.ducker = FakeDucker(player)
+    h.make_ducker = lambda: h.ducker
     return h
 
 
@@ -220,3 +242,41 @@ def test_break_now_too_late_carries_over(host):
     assert host.force_break is True    # still wanted at the end of song 2
     play_through(host)
     assert len(host.clip.started) == 1
+
+
+# ---------- talking over the music ----------
+
+def test_transition_talks_over_the_song_end_without_pausing(host):
+    host.cfg.brk.transition = "duck"
+    host.counter = 1
+    play_through(host)
+    assert len(host.clip.started) == 1
+    assert host.player.calls == []                       # never paused
+    (kind, pos), (kind2, fade) = host.ducker.events
+    assert kind == "duck" and kind2 == "restore" and fade == host.cfg.brk.fade_up_ms
+    # a 20 s clip: the next song starts halfway, so the voice starts ~10 s + fade before the end
+    assert 60_000 - pos == pytest.approx(10_000 + host.cfg.brk.fade_down_ms, abs=300)
+    next_track(host, 2)
+    assert host.counter == 0                             # song 1 closed the cycle
+
+
+def test_transition_falls_back_to_pause_when_volume_cant_be_lowered(host):
+    host.cfg.brk.transition = "duck"
+    host.ducker._available = False                       # e.g. music plays on a phone
+    host.counter = 1
+    play_through(host)
+    assert host.player.calls == ["pause", "play"]
+    assert len(host.clip.started) == 1
+
+
+def test_user_pausing_during_transition_restores_volume_fast_and_stays_paused(host):
+    host.cfg.brk.transition = "duck"
+    host.counter = 1
+
+    def user(p):
+        if host.ducker.events and p.status == "Playing" and host.talking:
+            p.status = "Paused"
+    host.player.on_state = user
+    play_through(host)
+    assert host.player.calls == []                       # we never press play
+    assert host.ducker.events[-1] == ("restore", 300)

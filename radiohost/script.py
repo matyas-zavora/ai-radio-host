@@ -95,6 +95,11 @@ class ScriptWriter:
             min_words=int(brk.min_seconds * rate), max_words=self.max_words,
             min_s=brk.min_seconds, max_s=brk.max_seconds,
         )
+        if brk.transition == "duck":
+            self.system += ("- You talk over the music: the previous song fades out under your "
+                            "voice, and the next song starts quietly underneath about halfway "
+                            "through. Keep one continuous flow and name the next song in the "
+                            "second half, like a DJ talking over an intro.\n")
 
     @staticmethod
     def build_prompt(facts: Facts, has_previous: bool) -> str:

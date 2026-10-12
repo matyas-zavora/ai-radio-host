@@ -32,6 +32,10 @@ class BreakConfig:
     lead_ms: int = 800             # pause this long before the current track ends
     min_seconds: int = 15          # target speech length
     max_seconds: int = 25
+    transition: str = "duck"       # duck = talk over lowered music | pause = stop the music
+    duck_level: int = 30           # music volume while the host talks, % of the original
+    fade_down_ms: int = 1500
+    fade_up_ms: int = 3000
 
 
 @dataclass

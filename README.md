@@ -1,9 +1,11 @@
 # AI Radio Host
 
 A personal radio host for your Spotify playlist. You play music in the
-Spotify desktop app as usual. Every N songs (default 3), right before the next
-song starts, playback pauses, an AI host introduces the upcoming song in 15–25
-seconds of speech, and then the music resumes.
+Spotify desktop app as usual. Every N songs (default 3), the AI host introduces
+the upcoming song in 15–25 seconds of speech, the way a radio DJ does: the music
+fades down at the end of the song, the host starts talking, the next song begins
+quietly under the voice, and the music fades back up when the host is done.
+You can switch to a simpler mode where the music pauses while the host talks.
 
 Needs Spotify Premium (Spotify's developer API requires it) and Linux.
 Alternative Spotify players work too, for example
@@ -61,11 +63,25 @@ The app finds whichever one is running.
 | You change the queue | It's caught by the 30 s recheck and the break is regenerated. If the change comes later, the break is skipped. |
 | You pause | Nothing happens. The app never presses play on its own, except to resume after its own break. |
 | You press play during a break | The clip stops and you keep control. |
+| You pause or change the song while the host talks over the music | The clip stops and the music volume comes back right away. |
+| You change the music volume while it's lowered | The app stops touching the volume. |
+| The app crashes while the music is lowered | The volume is restored on the next start. |
+| Music plays on another device (phone, speaker), or the song is very short | That break pauses the music instead of talking over it. |
 | Shuffle | Works if Spotify reports the shuffled order. Check this with `radiohost queue-test`. |
 | Queue empty / next item is a podcast | The break is skipped. The counter stays, so the next song gets the break. |
 | Spotify closed or restarted | The app logs it, waits, and picks up again when it's back. |
 | Spotify 429 / expired token | It backs off by `Retry-After`. Tokens refresh automatically. |
 | Facts, LLM or TTS fail | The break is skipped silently and the music keeps going. If Google TTS fails or hits its budget, Piper is used. |
+
+### Talking over the music and Spotify's rules
+
+The default transition lowers the Spotify app's volume (through PulseAudio or
+PipeWire, so it only works when the music plays on this computer) and plays the
+host's voice over the end of one song and the start of the next. Spotify's
+[Developer Policy](https://developer.spotify.com/policy) (III.7) says apps must
+not "overlap any Spotify Content with any other audio content". If you want to
+stay strictly within that rule, choose **Settings → Breaks → Transition → Pause
+the music**: the music stops while the host talks, and nothing overlaps.
 
 ## Install
 
@@ -204,7 +220,7 @@ To add it to your app launcher:
 |---|---|
 | **On Air** | The studio sign (grey **OFF**, green **READY** while on air and waiting, red pulsing **ON AIR** while the host talks), the on/off and dry-run switches, "Break after this song", the current song, the count toward the next break, the next break's status, and recent scripts (▶ replays one). |
 | **Host** | Everything about the host in one place, applied right away (the host restarts in the background if it's on air, never mid-sentence). **Language**, **name** and **personality**. **Script writer**: one list with Claude Sonnet 5 (recommended), Haiku 4.5 (cheaper), Opus 5, and any local Ollama models. **Voice**: volume with a ▶ test, plus all natural (Google) and local (Piper) voices for the current language with ▶ samples. Tick one to use it. Each language keeps its own voice. |
-| **Settings** | Breaks (how often, how long, when a song counts, pause timing), advanced options (local voice if Google fails, Google monthly limit, Ollama server), account status with a Spotify login button and **Run setup again**, and at the bottom **Reset everything and set up again**. Reset deletes the settings, the Spotify login and the keys in `.env`, then opens the setup wizard. It keeps your Google key file, the monthly Google usage counter and downloaded voices. |
+| **Settings** | Breaks (how often, the transition: talk over the music or pause it, music volume while talking, how long, when a song counts), advanced options (local voice if Google fails, Google monthly limit, Ollama server), account status with a Spotify login button and **Run setup again**, and at the bottom **Reset everything and set up again**. Reset deletes the settings, the Spotify login and the keys in `.env`, then opens the setup wizard. It keeps your Google key file, the monthly Google usage counter and downloaded voices. |
 | **Log** | The live log. |
 
 If you close the window while on air, the app asks whether to keep running in

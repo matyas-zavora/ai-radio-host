@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .audio import ClipPlayer
 from .config import CACHE_DIR, Config
+from .ducking import Ducker
 from .facts import FactFinder
 from .models import PlayerState, Track
 from .player import PlayerControl, PlayerUnavailable
@@ -33,6 +34,7 @@ class Break:
     next: Track
     script: str
     audio: Path | None   # None in dry-run
+    seconds: float = 0.0  # clip length (estimated in dry-run)
 
 
 @dataclass
@@ -49,6 +51,7 @@ class Plan:
     retry_at: float = 0.0
     cancelled: str | None = None
     done: bool = False
+    pause_instead: bool = False   # talking over the music isn't possible for this break
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -84,6 +87,7 @@ class RadioHost:
         self.history: deque[dict] = deque(maxlen=50)   # generated breaks, newest last
         self._stop = threading.Event()
         self.talking: Track | None = None   # set while a break clip is playing
+        self.make_ducker = lambda: Ducker(cfg.brk.duck_level)
         self.force_break = False            # "break after this song", set by the GUI
 
     def stop(self) -> None:
@@ -126,7 +130,7 @@ class RadioHost:
         entry = {"time": time.strftime("%H:%M"), "track": nxt, "script": script,
                  "facts": len(facts.items), "audio": None}
         self.history.append(entry)
-        audio = None
+        audio, seconds = None, len(script.split()) / 2.4
         if not self.dry_run:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
             for old in CACHE_DIR.glob("break-*.wav"):
@@ -134,9 +138,30 @@ class RadioHost:
                     old.unlink(missing_ok=True)
             audio = self.tts.synthesize(script, CACHE_DIR / f"break-{int(time.time() * 1000)}.wav")
             entry["audio"] = audio
+            seconds = wav_seconds(audio)
             log.info("Audio ready: %.1fs clip via %s (%.1fs to prepare)",
-                     wav_seconds(audio), self.tts.name, time.monotonic() - t0)
-        return Break(nxt, script, audio)
+                     seconds, self.tts.name, time.monotonic() - t0)
+        return Break(nxt, script, audio, seconds)
+
+    # ---------- timing ----------
+
+    @property
+    def _ducking(self) -> bool:
+        return self.cfg.brk.transition == "duck"
+
+    def _lead_ms(self) -> int:
+        """Worst-case time before the song's end at which the break starts."""
+        b = self.cfg.brk
+        return b.max_seconds * 500 + b.fade_down_ms if self._ducking else b.lead_ms
+
+    def _final_at(self) -> int:
+        return max(FINAL_CHECK_AT_MS, self._lead_ms() + 4000)
+
+    def _min_regen(self) -> int:
+        return max(MIN_REGEN_MS, self._final_at() + 7000)
+
+    def _recheck_at(self) -> int:
+        return max(RECHECK_AT_MS, self._min_regen() + 10_000)
 
     def _queue(self) -> tuple[Track | None, list[Track]]:
         return self.spotify.queue()
@@ -145,6 +170,7 @@ class RadioHost:
 
     def run(self) -> None:
         n = self.cfg.brk.every_n_tracks
+        Ducker.recover()
         log.info("Radio host on air%s: break every %d track%s, language %s, model %s",
                  " (DRY RUN)" if self.dry_run else "", n, "s" if n != 1 else "",
                  self.cfg.host.language,
@@ -191,10 +217,25 @@ class RadioHost:
         self.step_plan(state)
 
         p = self.plan
-        if (state.playing and not p.done and not p.cancelled
-                and state.remaining_ms <= self.cfg.brk.lead_ms):
-            if p.verified and p.ready:
-                self.do_break(state, p.ready)
+        if not state.playing or p.done or p.cancelled:
+            return
+        brk = p.ready
+        if self._ducking and not p.pause_instead and brk and p.verified:
+            start_at = brk.seconds * 500 + self.cfg.brk.fade_down_ms  # next song starts mid-clip
+            if state.remaining_ms <= start_at:
+                if state.duration_ms < start_at + 5000:
+                    p.pause_instead = True
+                    log.info("Song too short to talk over; pausing for this break")
+                elif not self.dry_run and not self.make_ducker().available():
+                    p.pause_instead = True
+                    log.info("Can't lower the player's volume (music not on this computer?); "
+                             "pausing for this break")
+                else:
+                    self.do_transition(state, brk)
+                    return
+        if state.remaining_ms <= self.cfg.brk.lead_ms:
+            if p.verified and brk:
+                self.do_break(state, brk)
             else:
                 self.cancel(p, "break not ready/verified when the track ended")
 
@@ -266,10 +307,10 @@ class RadioHost:
             return
         if p.next is None:
             self._submit_check(p, "initial")
-        elif not p.rechecked and MIN_REGEN_MS < rem <= RECHECK_AT_MS:
+        elif not p.rechecked and self._min_regen() < rem <= self._recheck_at():
             p.rechecked = True
             self._submit_check(p, "recheck")
-        elif not p.final_checked and rem <= FINAL_CHECK_AT_MS:
+        elif not p.final_checked and rem <= self._final_at():
             p.final_checked = True
             self._submit_check(p, "final")
 
@@ -279,7 +320,7 @@ class RadioHost:
         rem = state.remaining_ms
 
         def retry(delay: float, why: str) -> None:
-            if kind == "final" and rem < self.cfg.brk.lead_ms + delay * 1000:
+            if kind == "final" and rem < self._lead_ms() + delay * 1000:
                 self.cancel(p, f"final queue check failed ({why})")
                 return
             log.debug("queue check (%s) retry in %.1fs: %s", kind, delay, why)
@@ -315,7 +356,7 @@ class RadioHost:
             return
         if p.next is not None:
             log.info("Queue changed: next is now %s (was %s)", nxt, p.next)
-        if rem < MIN_REGEN_MS:
+        if rem < self._min_regen():
             if p.next is None:
                 return self.cancel(p, "too little time left to prepare a break")
             return self.cancel(p, f"queue changed to {nxt} too late to regenerate")
@@ -326,6 +367,52 @@ class RadioHost:
         p.gen = self.pool.submit(self.generate, nxt, p.for_track)
 
     # ---------- the break ----------
+
+    def do_transition(self, state: PlayerState, brk: Break) -> None:
+        """Talk over the end of this song and the start of the next one: lower the music,
+        play the clip (the next song starts by itself halfway through), raise the music."""
+        p = self.plan
+        if self.dry_run:
+            p.done, self.force_break, self.counter, self.cur_counted = True, False, 0, True
+            log.info("[dry run] Would lower the music now and introduce %s over it", brk.next)
+            return
+        ducker = self.make_ducker()
+        if not ducker.duck(self.cfg.brk.fade_down_ms):
+            p.pause_instead = True   # the stream vanished; pause at the end instead
+            return
+        p.done, self.force_break, self.counter, self.cur_counted = True, False, 0, True
+        log.info("ON AIR over the music: introducing %s", brk.next)
+        self.clip.start(brk.audio)
+        self.talking = brk.next
+        ending, coming = state.track, brk.next
+        user_paused = False
+        while self.clip.running():
+            time.sleep(0.2)
+            ducker.hold()
+            if self._stop.is_set():
+                self.clip.stop()
+                break
+            try:
+                s = self.player.state()
+            except PlayerUnavailable:
+                continue
+            if s is None or s.track is None:
+                continue
+            if s.status == "Paused":
+                log.info("You paused; stopping the break")
+                self.clip.stop()
+                user_paused = True
+                break
+            if not (s.track.same_as(ending) or s.track.same_as(coming)):
+                log.info("You changed the song; stopping the break")
+                self.clip.stop()
+                break
+        self.talking = None
+        if err := self.clip.failed():
+            log.warning("Clip playback failed: %s", err)
+        self.last_break_for = coming
+        ducker.restore(300 if user_paused else self.cfg.brk.fade_up_ms)
+        log.info("Back to the music")
 
     def do_break(self, state: PlayerState, brk: Break, late: bool = False) -> None:
         p = self.plan

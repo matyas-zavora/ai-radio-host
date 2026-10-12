@@ -357,9 +357,17 @@ class Window(Adw.ApplicationWindow):
         self.s_max = _spin("Longest break", 5, 90, 1, c.brk.max_seconds, "seconds of speech")
         self.s_played = _spin("Song counts after", 0, 180, 5, c.brk.min_played_seconds,
                               "seconds played (skips before that don't count)")
-        self.s_lead = _spin("Pause before song end", 200, 3000, 100, c.brk.lead_ms, "milliseconds")
-        for w in (self.s_every, self.s_min, self.s_max, self.s_played, self.s_lead):
+        self.s_transition = _combo("Transition", ["duck", "pause"], c.brk.transition,
+                                   ["Talk over the music (smooth)", "Pause the music"])
+        self.s_duck = _spin("Music volume while talking", 0, 80, 5, c.brk.duck_level,
+                            "% of the normal volume")
+        self.s_lead = _spin("Pause before song end", 200, 3000, 100, c.brk.lead_ms,
+                            "milliseconds (pause mode)")
+        self.s_transition.connect("notify::selected", lambda *_: self._transition_rows())
+        for w in (self.s_every, self.s_transition, self.s_duck, self.s_min, self.s_max,
+                  self.s_played, self.s_lead):
             g.add(w)
+        self._transition_rows()
         page.add(g)
 
         g = Adw.PreferencesGroup(title="Advanced")
@@ -403,6 +411,15 @@ class Window(Adw.ApplicationWindow):
         g.add(reset)
         page.add(g)
         return page
+
+    def _transition_rows(self) -> None:
+        duck = self.s_transition.items[self.s_transition.get_selected()] == "duck"
+        self.s_duck.set_visible(duck)
+        self.s_lead.set_visible(not duck)
+        self.s_transition.set_subtitle(
+            "The music fades down, the next song starts under the voice. Needs the music "
+            "on this computer; otherwise it pauses." if duck
+            else "The music stops while the host talks.")
 
     def _confirm_reset(self) -> None:
         dialog = Adw.AlertDialog(
@@ -463,6 +480,8 @@ class Window(Adw.ApplicationWindow):
             c.brk.max_seconds = max(int(self.s_max.get_value()), c.brk.min_seconds)
             c.brk.min_played_seconds = int(self.s_played.get_value())
             c.brk.lead_ms = int(self.s_lead.get_value())
+            c.brk.transition = self.s_transition.items[self.s_transition.get_selected()]
+            c.brk.duck_level = int(self.s_duck.get_value())
             c.tts.fallback = "piper" if self.s_fallback.get_active() else ""
             c.tts.google_monthly_char_limit = int(self.s_budget.get_value())
             c.llm.ollama_url = self.s_ollama_url.get_text().strip() or c.llm.ollama_url
