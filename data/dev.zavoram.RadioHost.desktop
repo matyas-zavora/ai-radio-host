@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=AI Radio Host
+Comment=AI radio host talk breaks between your Spotify songs
+Exec=@VENV@/bin/radiohost-gui
+Icon=dev.zavoram.RadioHost
+Categories=AudioVideo;Audio;
+Keywords=spotify;radio;dj;spotifast;
+StartupNotify=true

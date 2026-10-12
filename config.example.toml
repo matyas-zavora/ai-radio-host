@@ -1,0 +1,46 @@
+# Copy to config.toml (gitignored) or ~/.config/ai-radio-host/config.toml and edit.
+# Every key is optional; the values below are the defaults.
+# Secrets (API keys) go in .env, not here.
+
+[break]
+every_n_tracks = 3        # talk break after every N tracks
+min_played_seconds = 30   # a track counts toward N once it has played this long
+lead_ms = 800             # pause this long before the current track ends
+min_seconds = 15          # target length of the spoken break
+max_seconds = 25
+
+[host]
+language = "en"           # "en" or "cs"; override per run with --lang
+name = ""                 # optional on-air name
+personality = "a warm late-night radio DJ: relaxed and smooth, a little witty, talks like a friend keeping the listener company"
+
+[llm]
+model = "claude-sonnet-5"
+effort = "medium"         # low | medium | high
+
+[tts]
+provider = "google"       # google | piper
+fallback = "piper"        # used when the primary fails or hits its budget; "" = skip the break
+
+[tts.google]
+monthly_char_limit = 900000   # Chirp 3 HD free tier is 1M chars/month; this app's usage only
+[tts.google.voices]
+en = "en-US-Chirp3-HD-Charon"
+cs = "cs-CZ-Chirp3-HD-Charon"
+
+[tts.piper]
+voices_dir = "~/.local/share/ai-radio-host/piper"   # voices download here automatically
+[tts.piper.voices]
+en = "en_US-ryan-high"
+cs = "cs_CZ-jirka-medium"
+
+[player]
+backends = ["mpris", "cli", "webapi"]   # tried in this order
+mpris_name = "spotifast"
+
+[audio]
+command = ""              # "" = auto (pw-play, paplay, mpv); e.g. "mpv --no-video"
+volume = 100              # host voice volume in %, ignored with a custom command
+
+[spotify]
+redirect_uri = "http://127.0.0.1:8888/callback"   # must match the Spotify app exactly
