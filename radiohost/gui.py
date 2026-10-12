@@ -359,8 +359,9 @@ class Window(Adw.ApplicationWindow):
                               "seconds played (skips before that don't count)")
         self.s_transition = _combo("Transition", ["duck", "pause"], c.brk.transition,
                                    ["Talk over the music (smooth)", "Pause the music"])
-        self.s_duck = _spin("Music volume while talking", 0, 80, 5, c.brk.duck_level,
-                            "% of the normal volume")
+        self.s_duck = _spin("Music volume while talking", 0, 100, 5, c.brk.duck_level)
+        self.s_duck.connect("notify::value", lambda *_: self._duck_subtitle())
+        self._duck_subtitle()
         self.s_lead = _spin("Pause before song end", 200, 3000, 100, c.brk.lead_ms,
                             "milliseconds (pause mode)")
         self.s_transition.connect("notify::selected", lambda *_: self._transition_rows())
@@ -411,6 +412,13 @@ class Window(Adw.ApplicationWindow):
         g.add(reset)
         page.add(g)
         return page
+
+    def _duck_subtitle(self) -> None:
+        v = int(self.s_duck.get_value())
+        self.s_duck.set_subtitle(
+            "Music goes silent while the host talks" if v == 0 else
+            "Music stays at full volume" if v == 100 else
+            f"Music plays at {v} % of its normal volume ({100 - v} % quieter)")
 
     def _transition_rows(self) -> None:
         duck = self.s_transition.items[self.s_transition.get_selected()] == "duck"
