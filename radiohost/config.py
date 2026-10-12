@@ -169,3 +169,31 @@ def save_config(cfg: Config, path: Path | None = None) -> Path:
     path.write_text("\n".join(lines))
     cfg.source = path
     return path
+
+
+def env_file() -> Path:
+    return (PROJECT_DIR if DEV else CONFIG_DIR) / ".env"
+
+
+def set_env(values: dict[str, str]) -> Path:
+    """Write KEY=VALUE pairs into .env (replacing or uncommenting existing lines), mode 600,
+    and apply them to this process."""
+    path = env_file()
+    lines = path.read_text().splitlines() if path.exists() else []
+    for key, value in values.items():
+        new = f"{key}={value}"
+        for i, line in enumerate(lines):
+            bare = line.lstrip("# ").strip()
+            if bare.startswith(f"{key}="):
+                lines[i] = new
+                break
+        else:
+            lines.append(new)
+        os.environ[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.touch(mode=0o600)
+    tmp.chmod(0o600)
+    tmp.write_text("\n".join(lines) + "\n")
+    tmp.replace(path)
+    return path

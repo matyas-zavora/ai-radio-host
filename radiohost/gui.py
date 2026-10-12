@@ -122,6 +122,25 @@ class Window(Adw.ApplicationWindow):
 
         self.connect("close-request", self._on_close)
         GLib.timeout_add(250, self._refresh)
+        from .setup_wizard import setup_needed
+        if setup_needed():
+            GLib.idle_add(lambda: self.open_setup() and False)
+
+    def open_setup(self) -> None:
+        from .setup_wizard import SetupWizard
+
+        def finished(go_on_air: bool) -> None:
+            self.cfg = load_config()
+            self._refresh_accounts()
+            self.lang.set_selected(self.lang.items.index(self.cfg.host.language))
+            self.s_name.set_text(self.cfg.host.name)
+            self.s_provider.set_selected(self.s_provider.items.index(self.cfg.tts.provider))
+            self.s_fallback.set_selected(self.s_fallback.items.index(self.cfg.tts.fallback))
+            self._load_voices()
+            if go_on_air and not self.app.running:
+                self.dryrun.set_active(False)
+                self.onair.set_active(True)
+        SetupWizard(finished).present(self)
 
     def toast(self, text: str) -> None:
         self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(text)))
@@ -427,6 +446,9 @@ class Window(Adw.ApplicationWindow):
         self.acc_google = Adw.ActionRow(title="Google Cloud TTS")
         for w in (self.acc_spotify, self.acc_anthropic, self.acc_google):
             g.add(w)
+        rerun = Adw.ButtonRow(title="Run setup again", start_icon_name="emblem-system-symbolic")
+        rerun.connect("activated", lambda *_: self.open_setup())
+        g.add(rerun)
         page.add(g)
         self._refresh_accounts()
 

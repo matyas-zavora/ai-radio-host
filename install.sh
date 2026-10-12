@@ -57,12 +57,10 @@ if [ ! -e "$CONF_DIR/config.toml" ]; then
 fi
 if [ ! -e "$CONF_DIR/.env" ]; then
   (umask 077 && cp "$SRC/.env.example" "$CONF_DIR/.env")
-  echo "Created $CONF_DIR/.env (fill in your keys)"
+  echo "Created $CONF_DIR/.env (the setup wizard fills it in)"
 fi
 
 echo
-echo "Installed. Next steps:"
-echo "  1. Put your keys in $CONF_DIR/.env (see README: Spotify app, Anthropic key, Google TTS)"
-echo "  2. radiohost auth          # Spotify login, once"
-echo "  3. Open 'AI Radio Host' from your launcher (or run: radiohost-gui)"
+echo "Installed. Open 'AI Radio Host' from your launcher (or run: radiohost-gui)."
+echo "On first launch, a setup wizard walks you through Spotify, Claude and the voice."
 case ":$PATH:" in *":$BIN_DIR:"*) ;; *) echo "Note: $BIN_DIR is not in your PATH.";; esac

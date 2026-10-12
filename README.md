@@ -80,9 +80,13 @@ creates `~/.config/ai-radio-host/config.toml` and `.env` (mode 600). To update,
 run a newer release's `./install.sh`; your settings are kept.
 `./install.sh --uninstall` removes the app but keeps your settings.
 
+Then open **AI Radio Host**. On first launch, a setup wizard walks you through
+the Spotify app and login, the Claude API key and the voice, and saves
+everything for you. You can run it again from Settings → Accounts. The manual
+steps below are only needed if you prefer to edit the files yourself.
+
 An installed copy reads `config.toml` and `.env` from `~/.config/ai-radio-host/`.
 A source checkout (for development) reads them from the project folder.
-Then continue with the accounts below (from step 2).
 
 ## Setup
 

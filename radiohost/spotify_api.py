@@ -91,7 +91,7 @@ class SpotifyClient:
         tmp.write_text(json.dumps(data))
         tmp.replace(self.token_file)
 
-    def login(self) -> None:
+    def login(self, timeout: float = 180) -> None:
         """Interactive Authorization Code + PKCE flow via a loopback redirect."""
         verifier = secrets.token_urlsafe(64)
         challenge = base64.urlsafe_b64encode(
@@ -124,10 +124,20 @@ class SpotifyClient:
             def log_message(self, *args):
                 pass
 
-        server = HTTPServer((redirect.hostname, redirect.port or 80), Handler)
+        try:
+            server = HTTPServer((redirect.hostname, redirect.port or 80), Handler)
+        except OSError as e:
+            raise NotAuthorized(f"can't listen on {redirect.hostname}:{redirect.port} ({e})") from e
+        server.timeout = 1
         print(f"Opening browser for Spotify login. If it doesn't open, visit:\n{url}\n")
         webbrowser.open(url)
+        deadline = time.monotonic() + timeout
         while "code" not in result and "error" not in result:
+            if time.monotonic() > deadline:
+                server.server_close()
+                raise NotAuthorized(
+                    "no answer from the Spotify login. Check that the app's redirect URI is "
+                    f"exactly {self.redirect_uri}, then try again")
             server.handle_request()
         server.server_close()
         if "error" in result or result.get("state") != state:
