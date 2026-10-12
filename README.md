@@ -146,8 +146,8 @@ several seconds longer while the model loads.
 
 **Piper (local, free).** Works out of the box. Voices download automatically
 on first use to `~/.local/share/ai-radio-host/piper` (`en_US-ryan-high`,
-`cs_CZ-jirka-medium`, about 180 MB in total). To use only Piper, set
-`[tts] provider = "piper"`.
+`cs_CZ-jirka-medium`, about 180 MB in total). To use Piper, pick a voice under
+**Local voices** on the Host tab, or set it in `[tts.voices]`.
 
 **Google Cloud TTS (default).** The free tier covers 1M characters/month for
 Chirp 3 HD voices and 4M for WaveNet/Standard. One break is about 350
@@ -198,10 +198,10 @@ To add it to your app launcher:
 
 | Tab | What it does |
 |---|---|
-| **On Air** | On/off switch, dry-run switch and language. Shows the current song, the count toward the next break, the next break's status, and recent scripts (▶ replays one). |
+| **On Air** | The ON AIR sign, the on/off and dry-run switches, "Break after this song", the current song, the count toward the next break, the next break's status, and recent scripts (▶ replays one). |
+| **Host** | Everything about the host in one place, applied right away (the host restarts in the background if it's on air, never mid-sentence). **Language**, **name** and **personality**. **Script writer**: one list with Claude Sonnet 5 (recommended), Haiku 4.5 (cheaper), Opus 5, and any local Ollama models. **Voice**: volume with a ▶ test, plus all natural (Google) and local (Piper) voices for the current language with ▶ samples. Tick one to use it. Each language keeps its own voice. |
+| **Settings** | Breaks (how often, how long, when a song counts, pause timing), advanced options (local voice if Google fails, Google monthly limit, Ollama server), account status with a Spotify login button and **Run setup again**, and at the bottom **Reset everything and set up again**. Reset deletes the settings, the Spotify login and the keys in `.env`, then opens the setup wizard. It keeps your Google key file, the monthly Google usage counter and downloaded voices. |
 | **Log** | The live log. |
-| **Settings** | Breaks, host personality, AI provider (Claude or Ollama) and model, speech provider, Google budget, account status (Spotify login button included), **Run setup again**, and at the bottom **Reset everything and set up again**. Reset deletes the settings, the Spotify login and the keys in `.env`, then opens the setup wizard. It keeps your Google key file, the monthly Google usage counter and downloaded voices. Changes apply the next time you go on air. |
-| **Voices** | Every Google Chirp 3 HD and Piper voice for the chosen language. ▶ plays a sample; tick a voice to use it. |
 
 If you close the window while on air, the app asks whether to keep running in
 the background. Opening the app again brings the window back.

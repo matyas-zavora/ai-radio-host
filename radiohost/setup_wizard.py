@@ -11,7 +11,8 @@ from typing import Callable
 
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
-from .config import CONFIG_DIR, LANGUAGES, env_file, load_config, save_config, set_env
+from .config import (CONFIG_DIR, LANGUAGES, env_file, load_config, save_config, set_env,
+                     voice_engine)
 from .spotify_api import NotAuthorized, SpotifyClient
 
 SPOTIFY_DASHBOARD = "https://developer.spotify.com/dashboard"
@@ -379,8 +380,8 @@ class SetupWizard(Adw.Dialog):
         if self.google_key_ok:
             self.g_row.set_subtitle(f"Key file: {creds}")
         self.v_google.set_sensitive(self.google_key_ok)
-        (self.v_google if self.google_key_ok and self.cfg.tts.provider == "google"
-         else self.v_piper).set_active(True)
+        uses_google = voice_engine(self.cfg.tts.voice_for(self.cfg.host.language)) == "google"
+        (self.v_google if self.google_key_ok and uses_google else self.v_piper).set_active(True)
 
         page, _ = self._page("Voice (3/3)", pp, "Finish", self._finish)
         return page
@@ -421,10 +422,14 @@ class SetupWizard(Adw.Dialog):
         cfg = load_config()
         cfg.host.language = self.lang.codes[self.lang.get_selected()]
         cfg.host.name = self.name.get_text().strip()
-        if self.v_google.get_active() and self.google_key_ok:
-            cfg.tts.provider, cfg.tts.fallback = "google", "piper"
-        else:
-            cfg.tts.provider, cfg.tts.fallback = "piper", ""
+        google = self.v_google.get_active() and self.google_key_ok
+        cfg.tts.provider = "google" if google else "piper"
+        cfg.tts.fallback = "piper"
+        # Keep a voice the user already picked for that engine; otherwise use its default.
+        defaults = cfg.tts.google_voices if google else cfg.tts.piper_voices
+        for lang in LANGUAGES:
+            if voice_engine(cfg.tts.voice_for(lang)) != cfg.tts.provider:
+                cfg.tts.voices[lang] = defaults[lang]
         save_config(cfg)
         self._next()
 

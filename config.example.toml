@@ -22,18 +22,21 @@ ollama_url = "http://localhost:11434"
 ollama_model = "qwen2.5:7b"   # any model from `ollama list`; small models follow the facts-only rule less reliably
 
 [tts]
-provider = "google"       # google | piper
-fallback = "piper"        # used when the primary fails or hits its budget; "" = skip the break
+fallback = "piper"        # if a Google voice fails or hits its budget, use the Piper voice; "" = skip the break
+
+[tts.voices]              # the voice for each language; Google (en-US-...) or Piper (en_US-...) names
+en = "en-US-Chirp3-HD-Charon"
+cs = "cs-CZ-Chirp3-HD-Charon"
 
 [tts.google]
 monthly_char_limit = 900000   # Chirp 3 HD free tier is 1M chars/month; this app's usage only
-[tts.google.voices]
+[tts.google.voices]      # defaults when switching a language to Google
 en = "en-US-Chirp3-HD-Charon"
 cs = "cs-CZ-Chirp3-HD-Charon"
 
 [tts.piper]
 voices_dir = "~/.local/share/ai-radio-host/piper"   # voices download here automatically
-[tts.piper.voices]
+[tts.piper.voices]       # defaults for Piper, and the fallback voice when Google fails
 en = "en_US-ryan-high"
 cs = "cs_CZ-jirka-medium"
 

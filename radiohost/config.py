@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -49,16 +50,28 @@ class LLMConfig:
     ollama_model: str = "qwen2.5:7b"
 
 
+def voice_engine(name: str) -> str:
+    """Google voices look like en-US-Chirp3-HD-Charon, Piper voices like en_US-ryan-high."""
+    return "google" if re.match(r"^[a-z]{2,3}-[A-Z]{2}-", name) else "piper"
+
+
 @dataclass
 class TTSConfig:
-    provider: str = "google"       # google | piper
-    fallback: str = "piper"        # provider to use when the primary fails; "" = none
+    # The voice for each language; the engine (Google or Piper) follows from the name.
+    voices: dict[str, str] = field(default_factory=dict)
+    provider: str = "google"       # legacy: used only when `voices` has no entry for a language
+    fallback: str = "piper"        # "piper" = use the Piper voice if Google fails; "" = skip the break
     google_voices: dict[str, str] = field(default_factory=lambda: {
         "en": "en-US-Chirp3-HD-Charon", "cs": "cs-CZ-Chirp3-HD-Charon"})
     google_monthly_char_limit: int = 900_000
     piper_voices: dict[str, str] = field(default_factory=lambda: {
         "en": "en_US-ryan-high", "cs": "cs_CZ-jirka-medium"})
     piper_voices_dir: Path = DATA_DIR / "piper"
+
+    def voice_for(self, lang: str) -> str:
+        if self.voices.get(lang):
+            return self.voices[lang]
+        return (self.google_voices if self.provider == "google" else self.piper_voices)[lang]
 
 
 @dataclass
@@ -117,6 +130,8 @@ def load_config(path: Path | None = None) -> Config:
                 cfg.tts.google_monthly_char_limit = int(google.pop("monthly_char_limit"))
             if "voices" in piper:
                 cfg.tts.piper_voices.update(piper.pop("voices"))
+            if isinstance(cfg.tts.voices, dict):
+                cfg.tts.voices = dict(cfg.tts.voices)
             if "voices_dir" in piper:
                 cfg.tts.piper_voices_dir = Path(piper.pop("voices_dir")).expanduser()
             if google or piper:
@@ -156,6 +171,7 @@ def save_config(cfg: Config, path: Path | None = None) -> Path:
         "host": vars(cfg.host),
         "llm": vars(cfg.llm),
         "tts": {"provider": t.provider, "fallback": t.fallback},
+        "tts.voices": {lang: t.voice_for(lang) for lang in LANGUAGES},
         "tts.google": {"monthly_char_limit": t.google_monthly_char_limit},
         "tts.google.voices": t.google_voices,
         "tts.piper": {"voices_dir": t.piper_voices_dir},

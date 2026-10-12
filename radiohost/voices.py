@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 
 from .config import CACHE_DIR, TTSConfig
-from .tts import GoogleTTS, PiperTTS, TTSProvider
+from .tts import make_tts
 
 PIPER_INDEX = "https://huggingface.co/rhasspy/piper-voices/raw/main/voices.json"
 PIPER_LOCALES = {"en": ("en_US", "en_GB"), "cs": ("cs_CZ",)}
@@ -76,11 +76,7 @@ def preview(voice: Voice, lang: str, cfg: TTSConfig) -> Path:
     if out.exists():
         return out
     out.parent.mkdir(parents=True, exist_ok=True)
-    tts: TTSProvider
-    if voice.provider == "piper":
-        tts = PiperTTS(voice.name, cfg.piper_voices_dir)
-    else:
-        tts = GoogleTTS(voice.name, cfg.google_monthly_char_limit)
+    tts = make_tts(voice.name, cfg)
     tmp = out.with_suffix(".tmp.wav")
     tts.synthesize(SAMPLES[lang], tmp)
     tmp.replace(out)

@@ -16,18 +16,20 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from .audio import AudioError, ClipPlayer  # noqa: E402
-from .config import CONFIG_DIR, DEV, LANGUAGES, PROJECT_DIR, Config, load_config, save_config  # noqa: E402
+from .config import (CONFIG_DIR, DEV, LANGUAGES, PROJECT_DIR, Config, load_config,  # noqa: E402
+                     save_config, voice_engine)
 from .spotify_api import NotAuthorized, SpotifyClient  # noqa: E402
 from . import voices as voice_catalog  # noqa: E402
 
 APP_ID = "dev.zavoram.RadioHost"
 log = logging.getLogger("radiohost")
 
-MODELS = ["claude-sonnet-5", "claude-haiku-4-5", "claude-opus-5"]
-LLM_PROVIDERS = ["anthropic", "ollama"]
-EFFORTS = ["low", "medium", "high"]
-PROVIDERS = ["google", "piper"]
-FALLBACKS = ["", "piper", "google"]
+CLAUDE_CHOICES = [
+    ("anthropic:claude-sonnet-5", "Claude Sonnet 5", "Recommended · about $0.002 per break"),
+    ("anthropic:claude-haiku-4-5", "Claude Haiku 4.5", "Cheaper · a bit plainer"),
+    ("anthropic:claude-opus-5", "Claude Opus 5", "Most capable · about 2.5× the cost"),
+]
+LOCAL_NOTE = "Free and private (Ollama) · invents facts more often, weak in Czech"
 LANG_CODES = list(LANGUAGES)
 
 # The studio "ON AIR" light: dark when idle, glowing red while the host speaks.
@@ -109,9 +111,9 @@ class Window(Adw.ApplicationWindow):
         self.toasts = Adw.ToastOverlay()
         stack = Adw.ViewStack()
         stack.add_titled_with_icon(self._build_onair(), "onair", "On Air", "media-playback-start-symbolic")
-        stack.add_titled_with_icon(self._build_log(), "log", "Log", "utilities-terminal-symbolic")
+        stack.add_titled_with_icon(self._build_host(), "host", "Host", "audio-input-microphone-symbolic")
         stack.add_titled_with_icon(self._build_settings(), "settings", "Settings", "emblem-system-symbolic")
-        stack.add_titled_with_icon(self._build_voices(), "voices", "Voices", "audio-speakers-symbolic")
+        stack.add_titled_with_icon(self._build_log(), "log", "Log", "utilities-terminal-symbolic")
         self.toasts.set_child(stack)
 
         header = Adw.HeaderBar()
@@ -134,9 +136,9 @@ class Window(Adw.ApplicationWindow):
             self.cfg = load_config()
             self._refresh_accounts()
             self.lang.set_selected(self.lang.items.index(self.cfg.host.language))
-            self.s_name.set_text(self.cfg.host.name)
-            self.s_provider.set_selected(self.s_provider.items.index(self.cfg.tts.provider))
-            self.s_fallback.set_selected(self.s_fallback.items.index(self.cfg.tts.fallback))
+            self.h_name.set_text(self.cfg.host.name)
+            self.h_personality.set_text(self.cfg.host.personality)
+            self._load_ollama_models()
             self._load_voices()
             if go_on_air and not self.app.running:
                 self.dryrun.set_active(False)
@@ -175,33 +177,13 @@ class Window(Adw.ApplicationWindow):
         g.add(box)
         page.add(g)
 
-        g = Adw.PreferencesGroup(title="Host")
+        g = Adw.PreferencesGroup(description="Voice, language and AI model: Host tab.")
         self.onair = Adw.SwitchRow(title="On air", subtitle="Off")
         self.onair.connect("notify::active", self._on_onair_toggled)
         self.dryrun = Adw.SwitchRow(title="Dry run",
                                     subtitle="Only write scripts: no speech, no pausing")
-        self.lang = _combo("Language", LANG_CODES, self.cfg.host.language,
-                           [LANGUAGES[c] for c in LANG_CODES])
-        self.lang.connect("notify::selected", self._on_lang_changed)
-        self.volume = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
-        self.volume.set_value(self.cfg.audio_volume)
-        self.volume.set_size_request(220, -1)
-        self.volume.set_valign(Gtk.Align.CENTER)
-        self.volume.set_draw_value(True)
-        self.volume.set_value_pos(Gtk.PositionType.RIGHT)
-        self.volume.set_format_value_func(lambda _s, v: f"{v:.0f} %")
-        self.volume.connect("value-changed", self._on_volume)
-        vol_row = Adw.ActionRow(title="Host voice volume",
-                                subtitle="Applies from the next clip")
-        vol_row.add_prefix(Gtk.Image(icon_name="audio-volume-high-symbolic"))
-        vol_row.add_suffix(self.volume)
-        self.test_btn = Gtk.Button(icon_name="media-playback-start-symbolic", valign=Gtk.Align.CENTER,
-                                   css_classes=["flat"], tooltip_text="Test: play a sample at this volume")
-        self.test_btn.connect("clicked", self._test_voice)
-        vol_row.add_suffix(self.test_btn)
-        self._volume_save = 0
-        for w in (self.onair, self.dryrun, self.lang, vol_row):
-            g.add(w)
+        g.add(self.onair)
+        g.add(self.dryrun)
         page.add(g)
 
         g = Adw.PreferencesGroup(title="Now")
@@ -219,58 +201,9 @@ class Window(Adw.ApplicationWindow):
         page.add(self.history_group)
         return page
 
-    def _test_voice(self, btn) -> None:
-        cfg = load_config()
-        lang = self.lang.items[self.lang.get_selected()]
-        provider = cfg.tts.provider
-        name = (cfg.tts.google_voices if provider == "google" else cfg.tts.piper_voices)[lang]
-        voice = voice_catalog.Voice(provider, name, name, "")
-        btn.set_sensitive(False)
-
-        def work():
-            try:
-                path, err = voice_catalog.preview(voice, lang, cfg.tts), None
-            except Exception as e:  # noqa: BLE001
-                path, err = None, str(e)
-
-            def done():
-                btn.set_sensitive(True)
-                if err:
-                    self.toast(f"Test failed ({provider}): {err[:120]}")
-                else:
-                    self._play(path)
-                return False
-            GLib.idle_add(done)
-        threading.Thread(target=work, daemon=True).start()
-
-    def _on_volume(self, scale) -> None:
-        v = int(round(scale.get_value()))
-        for clip in (self.clip, getattr(self.app.host, "clip", None)):
-            if clip is not None:
-                clip.volume = v
-        if self._volume_save:
-            GLib.source_remove(self._volume_save)
-
-        def save():
-            self._volume_save = 0
-            cfg = load_config()
-            cfg.audio_volume = v
-            save_config(cfg)
-            self.cfg.audio_volume = v
-            return False
-        self._volume_save = GLib.timeout_add(600, save)
-
-    def _on_lang_changed(self, row, _pspec):
-        self.cfg = load_config()  # don't write back a stale copy
-        self.cfg.host.language = row.items[row.get_selected()]
-        save_config(self.cfg)
-        if self.app.running:
-            self.toast("Language saved. Turn On air off and on to switch.")
-
     def _on_onair_toggled(self, row, _pspec):
         if row.get_active() and not self.app.running:
             self.cfg = load_config()
-            self.cfg.host.language = self.lang.items[self.lang.get_selected()]
             error = self.app.start_host(self.cfg, self.dryrun.get_active())
             if error:
                 self.toast(error)
@@ -414,39 +347,14 @@ class Window(Adw.ApplicationWindow):
             g.add(w)
         page.add(g)
 
-        g = Adw.PreferencesGroup(title="Host")
-        self.s_name = Adw.EntryRow(title="On-air name (optional)", text=c.host.name)
-        self.s_personality = Adw.EntryRow(title="Personality", text=c.host.personality)
-        g.add(self.s_name)
-        g.add(self.s_personality)
-        page.add(g)
-
-        g = Adw.PreferencesGroup(title="AI model")
-        self.s_llm = _combo("Provider", LLM_PROVIDERS, c.llm.provider,
-                            ["Claude (Anthropic API)", "Ollama (local, free)"])
-        self.s_model = _combo("Claude model", MODELS, c.llm.model)
-        self.s_effort = _combo("Effort", EFFORTS, c.llm.effort)
-        self.s_ollama_url = Adw.EntryRow(title="Ollama server", text=c.llm.ollama_url)
-        self.s_ollama_model = _combo("Ollama model", [c.llm.ollama_model], c.llm.ollama_model)
-        refresh = Gtk.Button(icon_name="view-refresh-symbolic", valign=Gtk.Align.CENTER,
-                             css_classes=["flat"], tooltip_text="Ask Ollama which models it has")
-        refresh.connect("clicked", lambda *_: self._load_ollama_models())
-        self.s_ollama_model.add_suffix(refresh)
-        for w in (self.s_llm, self.s_model, self.s_effort, self.s_ollama_url, self.s_ollama_model):
-            g.add(w)
-        self.s_llm_group = g
-        self.s_llm.connect("notify::selected", lambda *_: self._llm_rows())
-        self._llm_rows()
-        page.add(g)
-
-        g = Adw.PreferencesGroup(title="Speech", description="Pick voices on the Voices tab.")
-        self.s_provider = _combo("Provider", PROVIDERS, c.tts.provider,
-                                 ["Google Cloud (natural)", "Piper (local, free)"])
-        self.s_fallback = _combo("If it fails", FALLBACKS, c.tts.fallback,
-                                 ["Skip the break", "Use Piper", "Use Google"])
+        g = Adw.PreferencesGroup(title="Advanced")
+        self.s_fallback = Adw.SwitchRow(title="Use a local voice if Google fails",
+                                        subtitle="Otherwise that break is skipped",
+                                        active=c.tts.fallback == "piper")
         self.s_budget = _spin("Google monthly limit", 0, 4_000_000, 50_000,
                               c.tts.google_monthly_char_limit, "characters (free tier: 1M for Chirp 3 HD)")
-        for w in (self.s_provider, self.s_fallback, self.s_budget):
+        self.s_ollama_url = Adw.EntryRow(title="Ollama server (for local models)", text=c.llm.ollama_url)
+        for w in (self.s_fallback, self.s_budget, self.s_ollama_url):
             g.add(w)
         page.add(g)
 
@@ -466,7 +374,7 @@ class Window(Adw.ApplicationWindow):
         page.add(g)
         self._refresh_accounts()
 
-        save = Gtk.Button(label="Save settings", halign=Gtk.Align.CENTER,
+        save = Gtk.Button(label="Save breaks and advanced settings", halign=Gtk.Align.CENTER,
                           css_classes=["pill", "suggested-action"])
         save.connect("clicked", self._save_settings)
         g = Adw.PreferencesGroup()
@@ -496,45 +404,6 @@ class Window(Adw.ApplicationWindow):
         dialog.set_close_response("cancel")
         dialog.connect("response", lambda _d, r: r == "reset" and self.app.reset_all())
         dialog.present(self)
-
-    def _llm_rows(self) -> None:
-        local = self.s_llm.items[self.s_llm.get_selected()] == "ollama"
-        for row in (self.s_model, self.s_effort):
-            row.set_visible(not local)
-        for row in (self.s_ollama_url, self.s_ollama_model):
-            row.set_visible(local)
-        self.s_llm_group.set_description(
-            "Free and private, but small models invent facts more often and are weak in Czech."
-            if local else "Sonnet 5 costs about $0.002 per break.")
-        if local and len(self.s_ollama_model.items) <= 1:
-            self._load_ollama_models()
-
-    def _load_ollama_models(self) -> None:
-        from .script import ollama_models
-        url = self.s_ollama_url.get_text().strip()
-        current = self.s_ollama_model.items[self.s_ollama_model.get_selected()]
-
-        def work():
-            try:
-                found, err = ollama_models(url), None
-            except Exception as e:  # noqa: BLE001
-                found, err = [], e
-
-            def done():
-                if err:
-                    self.s_ollama_model.set_subtitle(f"Can't reach Ollama at {url}")
-                    return False
-                if not found:
-                    self.s_ollama_model.set_subtitle("No models yet: run  ollama pull qwen2.5:7b")
-                    return False
-                items = found if current in found else found + [current]
-                self.s_ollama_model.items = items
-                self.s_ollama_model.set_model(Gtk.StringList.new(items))
-                self.s_ollama_model.set_selected(items.index(current))
-                self.s_ollama_model.set_subtitle(f"{len(found)} model(s) installed")
-                return False
-            GLib.idle_add(done)
-        threading.Thread(target=work, daemon=True).start()
 
     def _refresh_accounts(self) -> None:
         try:
@@ -573,112 +442,225 @@ class Window(Adw.ApplicationWindow):
         threading.Thread(target=work, daemon=True).start()
 
     def _save_settings(self, _btn):
-        c = self.cfg = load_config()
-        c.host.language = self.lang.items[self.lang.get_selected()]
-        c.brk.every_n_tracks = int(self.s_every.get_value())
-        c.brk.min_seconds = int(self.s_min.get_value())
-        c.brk.max_seconds = max(int(self.s_max.get_value()), c.brk.min_seconds)
-        c.brk.min_played_seconds = int(self.s_played.get_value())
-        c.brk.lead_ms = int(self.s_lead.get_value())
-        c.host.name = self.s_name.get_text().strip()
-        c.host.personality = self.s_personality.get_text().strip() or c.host.personality
-        c.llm.provider = self.s_llm.items[self.s_llm.get_selected()]
-        c.llm.model = self.s_model.items[self.s_model.get_selected()]
-        c.llm.effort = self.s_effort.items[self.s_effort.get_selected()]
-        c.llm.ollama_url = self.s_ollama_url.get_text().strip() or c.llm.ollama_url
-        c.llm.ollama_model = self.s_ollama_model.items[self.s_ollama_model.get_selected()]
-        c.tts.provider = self.s_provider.items[self.s_provider.get_selected()]
-        c.tts.fallback = self.s_fallback.items[self.s_fallback.get_selected()]
-        c.tts.google_monthly_char_limit = int(self.s_budget.get_value())
-        path = save_config(c)
-        self.toast(f"Saved to {path.name}" + (". Turn On air off and on to apply."
-                                              if self.app.running else ""))
+        def change(c):
+            c.brk.every_n_tracks = int(self.s_every.get_value())
+            c.brk.min_seconds = int(self.s_min.get_value())
+            c.brk.max_seconds = max(int(self.s_max.get_value()), c.brk.min_seconds)
+            c.brk.min_played_seconds = int(self.s_played.get_value())
+            c.brk.lead_ms = int(self.s_lead.get_value())
+            c.tts.fallback = "piper" if self.s_fallback.get_active() else ""
+            c.tts.google_monthly_char_limit = int(self.s_budget.get_value())
+            c.llm.ollama_url = self.s_ollama_url.get_text().strip() or c.llm.ollama_url
+        self._update_and_apply(change, "Settings saved.")
+        self._load_ollama_models()
 
-    # ---------- Voices ----------
+    # ---------- Host tab: language, name, personality, script writer, voice ----------
 
-    def _build_voices(self):
+    def _build_host(self):
+        c = self.cfg
         page = Adw.PreferencesPage()
-        g = Adw.PreferencesGroup(
-            description="Press ▶ to hear a sample, tick a voice to use it. Piper voices download "
-                        "on first use. Google previews need Google Cloud set up.")
-        self.v_lang = _combo("Language", LANG_CODES, self.cfg.host.language,
-                             [LANGUAGES[c] for c in LANG_CODES])
-        self.v_lang.connect("notify::selected", lambda *_: self._load_voices())
-        g.add(self.v_lang)
+
+        g = Adw.PreferencesGroup(title="Host", description="Changes apply right away.")
+        self.lang = _combo("Language", LANG_CODES, c.host.language,
+                           [LANGUAGES[x] for x in LANG_CODES])
+        self.lang.connect("notify::selected", lambda *_: self._on_lang_changed())
+        self.h_name = Adw.EntryRow(title="Name (optional)", text=c.host.name, show_apply_button=True)
+        self.h_name.connect("apply", lambda *_: self._save_host_text())
+        self.h_personality = Adw.EntryRow(title="Personality", text=c.host.personality,
+                                          show_apply_button=True)
+        self.h_personality.connect("apply", lambda *_: self._save_host_text())
+        for w in (self.lang, self.h_name, self.h_personality):
+            g.add(w)
         page.add(g)
-        self.v_google = Adw.PreferencesGroup(title="Google Cloud (Chirp 3 HD)")
-        self.v_piper = Adw.PreferencesGroup(title="Piper (local)")
-        page.add(self.v_google)
-        page.add(self.v_piper)
-        self.v_rows: dict[Adw.PreferencesGroup, list] = {self.v_google: [], self.v_piper: []}
+
+        g = Adw.PreferencesGroup(title="Script writer", description="The AI that writes what the host says.")
+        self.writer = Adw.ComboRow(title="Model")
+        self.writer.connect("notify::selected", lambda *_: self._on_writer_changed())
+        g.add(self.writer)
+        page.add(g)
+        self._fill_writer([])
+        self._load_ollama_models()
+
+        g = Adw.PreferencesGroup(title="Voice", description="Tick a voice to use it, ▶ to hear it. "
+                                                             "Each language keeps its own voice.")
+        self.volume = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
+        self.volume.set_value(c.audio_volume)
+        self.volume.set_size_request(200, -1)
+        self.volume.set_valign(Gtk.Align.CENTER)
+        self.volume.set_draw_value(True)
+        self.volume.set_value_pos(Gtk.PositionType.RIGHT)
+        self.volume.set_format_value_func(lambda _s, v: f"{v:.0f} %")
+        self.volume.connect("value-changed", self._on_volume)
+        self._volume_save = 0
+        self.voice_row = Adw.ActionRow(title="Current voice")
+        self.voice_row.add_prefix(Gtk.Image(icon_name="audio-volume-high-symbolic"))
+        self.voice_row.add_suffix(self.volume)
+        self.test_btn = Gtk.Button(icon_name="media-playback-start-symbolic", valign=Gtk.Align.CENTER,
+                                   css_classes=["flat"], tooltip_text="Play a sample at this volume")
+        self.test_btn.connect("clicked", self._test_voice)
+        self.voice_row.add_suffix(self.test_btn)
+        g.add(self.voice_row)
+        self.exp_google = Adw.ExpanderRow(title="Natural voices", subtitle="Google · free tier")
+        self.exp_piper = Adw.ExpanderRow(title="Local voices", subtitle="Piper · offline, more robotic")
+        g.add(self.exp_google)
+        g.add(self.exp_piper)
+        page.add(g)
+        self.v_rows: dict[Adw.ExpanderRow, list] = {self.exp_google: [], self.exp_piper: []}
+        self._radio: Gtk.CheckButton | None = None
         self._load_voices()
         return page
 
-    def _set_voice_rows(self, group, voices: list | None, error: str = "") -> None:
-        for row in self.v_rows[group]:
-            group.remove(row)
-        self.v_rows[group] = []
-        lang = self.v_lang.items[self.v_lang.get_selected()]
-        if voices is None:
-            row = Adw.ActionRow(title=error or "Loading voice list…")
-            group.add(row)
-            self.v_rows[group].append(row)
+    def _lang(self) -> str:
+        return self.lang.items[self.lang.get_selected()]
+
+    def _update_and_apply(self, change, message: str) -> None:
+        """Load the saved config, apply `change(cfg)`, save, and restart the host if on air."""
+        self.cfg = load_config()
+        change(self.cfg)
+        save_config(self.cfg)
+        self.app.apply_changes()
+        self.toast(message + (" Applying…" if self.app.running else ""))
+
+    def _on_lang_changed(self) -> None:
+        lang = self._lang()
+        if lang == load_config().host.language:
             return
-        provider = "google" if group is self.v_google else "piper"
-        current = (self.cfg.tts.google_voices if provider == "google" else self.cfg.tts.piper_voices)[lang]
-        google_ready = bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")) and Path(
-            os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")).exists()
-        radio_group = None
-        for v in voices:
-            row = Adw.ActionRow(title=GLib.markup_escape_text(v.label), subtitle=v.detail)
-            check = Gtk.CheckButton(active=v.name == current, valign=Gtk.Align.CENTER)
-            if radio_group is None:
-                radio_group = check
+        self._update_and_apply(lambda c: setattr(c.host, "language", lang),
+                               f"Host speaks {LANGUAGES[lang]}.")
+        self._load_voices()
+
+    def _save_host_text(self) -> None:
+        name = self.h_name.get_text().strip()
+        personality = self.h_personality.get_text().strip()
+
+        def change(c):
+            c.host.name = name
+            c.host.personality = personality or c.host.personality
+        self._update_and_apply(change, "Host saved.")
+
+    # script writer: one list of Claude models and local Ollama models
+
+    def _fill_writer(self, ollama: list[str]) -> None:
+        c = load_config()
+        current = (f"anthropic:{c.llm.model}" if c.llm.provider == "anthropic"
+                   else f"ollama:{c.llm.ollama_model}")
+        options = list(CLAUDE_CHOICES)
+        local = list(dict.fromkeys(ollama + ([c.llm.ollama_model] if c.llm.provider == "ollama" else [])))
+        options += [(f"ollama:{m}", f"Local: {m}", LOCAL_NOTE) for m in local]
+        if current not in [o[0] for o in options]:
+            options.append((current, current.split(":", 1)[1], ""))
+        self._writer_options = options
+        self._writer_filling = True
+        self.writer.set_model(Gtk.StringList.new([o[1] for o in options]))
+        self.writer.set_selected([o[0] for o in options].index(current))
+        self.writer.set_subtitle(options[self.writer.get_selected()][2])
+        self._writer_filling = False
+
+    def _load_ollama_models(self) -> None:
+        from .script import ollama_models
+        url = load_config().llm.ollama_url
+
+        def work():
+            try:
+                found = ollama_models(url)
+            except Exception:  # noqa: BLE001 - no Ollama is normal
+                found = []
+            GLib.idle_add(lambda: self._fill_writer(found) and False)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_writer_changed(self) -> None:
+        if self._writer_filling:
+            return
+        key, label, note = self._writer_options[self.writer.get_selected()]
+        self.writer.set_subtitle(note)
+        provider, model = key.split(":", 1)
+        if provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
+            self.toast("Claude needs an API key: Settings → Accounts → Run setup again.")
+
+        def change(c):
+            c.llm.provider = provider
+            if provider == "anthropic":
+                c.llm.model = model
             else:
-                check.set_group(radio_group)
-            check.connect("toggled", self._on_voice_selected, v, lang)
-            row.add_prefix(check)
-            row.set_activatable_widget(check)
-            play = Gtk.Button(icon_name="media-playback-start-symbolic", valign=Gtk.Align.CENTER,
-                              css_classes=["flat"], tooltip_text="Play sample")
-            if provider == "google" and not google_ready:
-                play.set_sensitive(False)
-                play.set_tooltip_text("Set up Google Cloud TTS first")
-            play.connect("clicked", self._preview, v, lang)
-            row.add_suffix(play)
-            group.add(row)
-            self.v_rows[group].append(row)
+                c.llm.ollama_model = model
+        self._update_and_apply(change, f"Script writer: {label}.")
+
+    # voices: Google and Piper in one radio group
+
+    def _google_ready(self) -> bool:
+        creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+        return bool(creds) and Path(creds).exists()
 
     def _load_voices(self) -> None:
-        lang = self.v_lang.items[self.v_lang.get_selected()]
-        self._set_voice_rows(self.v_google, voice_catalog.google_voices(lang))
-        self._set_voice_rows(self.v_piper, None)
+        lang = self._lang()
+        self._radio = None
+        self._set_voice_rows(self.exp_google, voice_catalog.google_voices(lang))
+        self._set_voice_rows(self.exp_piper, None)
         voices_dir = self.cfg.tts.piper_voices_dir
 
         def work():
             try:
                 result, err = voice_catalog.piper_voices(lang, voices_dir), ""
             except Exception as e:  # noqa: BLE001
-                result, err = None, f"Could not load Piper voice list: {e}"
-            GLib.idle_add(lambda: self._set_voice_rows(self.v_piper, result, err) and False)
+                result, err = None, f"Could not load the Piper voice list: {e}"
+            GLib.idle_add(lambda: self._set_voice_rows(self.exp_piper, result, err) and False)
         threading.Thread(target=work, daemon=True).start()
+        self._show_current_voice()
+
+    def _show_current_voice(self) -> None:
+        name = load_config().tts.voice_for(self._lang())
+        engine = voice_engine(name)
+        label = name.rsplit("-", 1)[-1] if engine == "google" else name
+        self.voice_row.set_subtitle(f"{label} · {'Google' if engine == 'google' else 'Piper'}")
+        self.exp_google.set_expanded(False)
+        self.exp_piper.set_expanded(False)
+
+    def _set_voice_rows(self, exp: Adw.ExpanderRow, voices: list | None, error: str = "") -> None:
+        for row in self.v_rows[exp]:
+            exp.remove(row)
+        self.v_rows[exp] = []
+        if voices is None:
+            row = Adw.ActionRow(title=error or "Loading voice list…")
+            exp.add_row(row)
+            self.v_rows[exp].append(row)
+            return
+        lang = self._lang()
+        current = load_config().tts.voice_for(lang)
+        google = exp is self.exp_google
+        usable = self._google_ready() or not google
+        if google:
+            exp.set_subtitle("Google · free tier" if usable else
+                             "Google · needs Google Cloud set up (Settings → Accounts)")
+        for v in voices:
+            row = Adw.ActionRow(title=GLib.markup_escape_text(v.label), subtitle=v.detail)
+            check = Gtk.CheckButton(active=v.name == current, valign=Gtk.Align.CENTER,
+                                    sensitive=usable)
+            if self._radio is None:
+                self._radio = check
+            else:
+                check.set_group(self._radio)
+            check.connect("toggled", self._on_voice_selected, v, lang)
+            row.add_prefix(check)
+            row.set_activatable_widget(check)
+            play = Gtk.Button(icon_name="media-playback-start-symbolic", valign=Gtk.Align.CENTER,
+                              css_classes=["flat"], tooltip_text="Play sample", sensitive=usable)
+            play.connect("clicked", self._preview, v, lang)
+            row.add_suffix(play)
+            exp.add_row(row)
+            self.v_rows[exp].append(row)
 
     def _on_voice_selected(self, check, voice, lang):
-        if not check.get_active():
+        if not check.get_active() or load_config().tts.voice_for(lang) == voice.name:
             return
-        self.cfg = load_config()
-        voices = self.cfg.tts.google_voices if voice.provider == "google" else self.cfg.tts.piper_voices
-        if voices.get(lang) == voice.name:
-            return
-        voices[lang] = voice.name
-        save_config(self.cfg)
-        note = "" if self.cfg.tts.provider == voice.provider else \
-            f" (Speech provider is {self.cfg.tts.provider}; change it in Settings to use this)"
-        self.toast(f"{LANGUAGES[lang]} voice: {voice.label}{note}")
+
+        def change(c):
+            c.tts.voices[lang] = voice.name
+            c.tts.provider = voice.provider
+        self._update_and_apply(change, f"{LANGUAGES[lang]} voice: {voice.label}.")
+        self._show_current_voice()
 
     def _preview(self, btn, voice, lang):
-        spinner = Adw.Spinner()
-        btn.set_child(spinner)
+        btn.set_child(Adw.Spinner())
         btn.set_sensitive(False)
         if voice.provider == "piper" and "MB download" in voice.detail:
             self.toast(f"Downloading {voice.label}…")
@@ -701,6 +683,29 @@ class Window(Adw.ApplicationWindow):
                 return False
             GLib.idle_add(done)
         threading.Thread(target=work, daemon=True).start()
+
+    def _test_voice(self, btn) -> None:
+        cfg = load_config()
+        lang = self._lang()
+        name = cfg.tts.voice_for(lang)
+        self._preview(btn, voice_catalog.Voice(voice_engine(name), name, name, ""), lang)
+
+    def _on_volume(self, scale) -> None:
+        v = int(round(scale.get_value()))
+        for clip in (self.clip, getattr(self.app.host, "clip", None)):
+            if clip is not None:
+                clip.volume = v
+        if self._volume_save:
+            GLib.source_remove(self._volume_save)
+
+        def save():
+            self._volume_save = 0
+            cfg = load_config()
+            cfg.audio_volume = v
+            save_config(cfg)
+            self.cfg.audio_volume = v
+            return False
+        self._volume_save = GLib.timeout_add(600, save)
 
     # ---------- closing ----------
 
@@ -740,6 +745,7 @@ class App(Adw.Application):
         self.held = False
         self.tray = None
         self.log_handler: GuiLogHandler | None = None
+        self._restart_pending = False
 
     @property
     def running(self) -> bool:
@@ -798,6 +804,33 @@ class App(Adw.Application):
         self.activate()
         if old is not None:
             old.destroy()
+
+    def apply_changes(self) -> None:
+        """Settings changed: restart the host (if on air) once it isn't talking."""
+        if not self.running or self._restart_pending:
+            return
+        self._restart_pending = True
+        GLib.timeout_add(400, self._restart_when_quiet)
+
+    def _restart_when_quiet(self) -> bool:
+        if not self.running:
+            self._restart_pending = False
+            return False
+        if self.host.talking is not None:
+            return True  # never cut the host off mid-sentence; try again shortly
+        old = self.host
+        old.stop()
+        self.thread.join(timeout=5)
+        error = self.start_host(load_config(), old.dry_run)
+        self._restart_pending = False
+        if error:
+            log.error("Couldn't apply the change: %s", error)
+            if self.window:
+                self.window.toast(f"Couldn't apply: {error}")
+        else:
+            self.host.counter, self.host.force_break = old.counter, old.force_break
+            log.info("Applied new settings")
+        return False
 
     def run_in_background(self) -> None:
         if not self.held:

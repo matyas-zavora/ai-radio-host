@@ -11,7 +11,7 @@ import threading
 import wave
 from pathlib import Path
 
-from .config import STATE_DIR, TTSConfig
+from .config import STATE_DIR, TTSConfig, voice_engine
 
 log = logging.getLogger(__name__)
 
@@ -145,16 +145,18 @@ class FallbackTTS(TTSProvider):
             return self.fallback.synthesize(text, out)
 
 
-def build_tts(cfg: TTSConfig, language: str) -> TTSProvider:
-    def make(name: str) -> TTSProvider:
-        if name == "piper":
-            return PiperTTS(cfg.piper_voices[language], cfg.piper_voices_dir)
-        if name == "google":
-            return GoogleTTS(cfg.google_voices[language], cfg.google_monthly_char_limit)
-        raise ValueError(f"unknown TTS provider: {name}")
+def make_tts(voice: str, cfg: TTSConfig) -> TTSProvider:
+    if voice_engine(voice) == "google":
+        return GoogleTTS(voice, cfg.google_monthly_char_limit)
+    return PiperTTS(voice, cfg.piper_voices_dir)
 
-    primary = make(cfg.provider)
-    fallback = make(cfg.fallback) if cfg.fallback and cfg.fallback != cfg.provider else None
+
+def build_tts(cfg: TTSConfig, language: str) -> TTSProvider:
+    voice = cfg.voice_for(language)
+    primary = make_tts(voice, cfg)
+    fallback = None
+    if voice_engine(voice) == "google" and cfg.fallback == "piper":
+        fallback = PiperTTS(cfg.piper_voices[language], cfg.piper_voices_dir)
     return FallbackTTS(primary, fallback)
 
 
