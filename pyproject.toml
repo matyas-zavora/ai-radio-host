@@ -1,6 +1,6 @@
 [project]
 name = "ai-radio-host"
-version = "0.3.0"
+version = "0.4.0"
 description = "AI radio host talk breaks between your Spotify songs (Linux, macOS)"
 readme = "README.md"
 license = {text = "MIT"}

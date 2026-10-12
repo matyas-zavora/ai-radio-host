@@ -1,0 +1,39 @@
+# On every published release, point the Homebrew formula (macOS) at the new tarball.
+# Needs a secret HOMEBREW_TAP_TOKEN: a fine-grained token with "Contents: read and write"
+# on matyas-zavora/homebrew-tap. Without it this job is skipped.
+name: Update Homebrew tap
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - name: Skip without a tap token
+        if: env.TAP_TOKEN == ''
+        run: echo "::notice::HOMEBREW_TAP_TOKEN is not set; update the formula by hand."
+
+      - uses: actions/checkout@v7
+        if: env.TAP_TOKEN != ''
+        with:
+          repository: matyas-zavora/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Point the formula at this release
+        if: env.TAP_TOKEN != ''
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
+          sha=$(curl -fsSL "$url" | sha256sum | cut -d' ' -f1)
+          f=Formula/ai-radio-host.rb
+          sed -i -E "s|^  url \".*\"|  url \"${url}\"|; s|^  sha256 \".*\"|  sha256 \"${sha}\"|" "$f"
+          git diff --quiet && { echo "Formula already up to date"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "ai-radio-host ${TAG}"
+          git push
