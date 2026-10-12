@@ -863,14 +863,17 @@ class Window(Adw.ApplicationWindow):
     # ---------- closing ----------
 
     def _on_close(self, _win) -> bool:
+        if sys.platform == "darwin":   # Cmd+W / close button: keep running hidden; Cmd+Q quits
+            from .macos import hide_app
+            self.app.run_in_background()
+            hide_app()
+            return True
         if not self.app.running:
             self.app.quit_all()
             return False
-        mac = sys.platform == "darwin"
         dialog = Adw.AlertDialog(
             heading="Keep the radio host on air?",
-            body="The window goes to the Dock but breaks keep happening." if mac else
-                 "The window closes but breaks keep happening. Click the microphone "
+            body="The window closes but breaks keep happening. Click the microphone "
                  "in the tray (or open AI Radio Host again) to bring it back.")
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("quit", "Stop and Quit")
@@ -883,10 +886,7 @@ class Window(Adw.ApplicationWindow):
         def on_response(_d, response):
             if response == "keep":
                 self.app.run_in_background()
-                if mac:
-                    self.minimize()
-                else:
-                    self.set_visible(False)
+                self.set_visible(False)
             elif response == "quit":
                 self.app.quit_all()
         dialog.connect("response", on_response)
@@ -915,7 +915,18 @@ class App(Adw.Application):
         css.load_from_string(CSS)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        if sys.platform == "darwin":   # the tray needs D-Bus; on macOS the window minimizes instead
+        if sys.platform == "darwin":   # the tray needs D-Bus; on macOS the window hides instead
+            # Cmd+Q quits everything (GTK's macOS menu "Quit" item also calls app.quit);
+            # Cmd+W hides the window and the host keeps running in the background.
+            for name, accel, callback in (
+                    ("quit", "<Meta>q", lambda *_: self.quit_all()),
+                    ("close-window", "<Meta>w", lambda *_: self.window and self.window.close())):
+                action = Gio.SimpleAction.new(name, None)
+                action.connect("activate", callback)
+                self.add_action(action)
+                self.set_accels_for_action(f"app.{name}", [accel])
+            self._mac_was_active = True
+            GLib.timeout_add(300, self._mac_follow_activation)
             return
         try:
             from .tray import TrayIcon
@@ -923,6 +934,17 @@ class App(Adw.Application):
                                  on_break=self.request_break, on_quit=self.quit_all)
         except Exception as e:  # noqa: BLE001 - no tray is fine
             log.warning("No tray icon: %s", e)
+
+    def _mac_follow_activation(self) -> bool:
+        """Cmd+Tab only activates an app, it never restores a minimized window
+        ("Keep Running" minimizes it), so bring the window back whenever we come to the front."""
+        from .macos import app_is_active
+        active = app_is_active()
+        if active and not self._mac_was_active and self.window is not None:
+            self.window.unminimize()
+            self.window.present()
+        self._mac_was_active = active
+        return True
 
     def request_break(self) -> None:
         if self.running:
