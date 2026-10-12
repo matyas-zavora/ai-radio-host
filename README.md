@@ -105,6 +105,19 @@ with **Reset everything and set up again** at the bottom of Settings.
 ## FAQ
 
 <details>
+<summary><b>Doesn't Spotify already have this? (Spotify's DJ)</b></summary>
+
+Spotify's DJ is great for discovering music, but **it picks the songs itself**:
+it plays its own selection based on your taste, which you can steer with
+requests, but you can't point it at one of your playlists. AI Radio Host does
+the opposite. **You choose the music**, whether it's your playlist, an album or
+your queue, in your order or shuffled, and the host only adds the talk between
+those songs. You also choose the host's name, personality, voice and how often
+it speaks.
+
+</details>
+
+<details>
 <summary><b>Does it work without Spotify Premium?</b></summary>
 
 No. Spotify only lets Premium accounts use its developer API, which the app
