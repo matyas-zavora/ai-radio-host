@@ -205,6 +205,22 @@ def test_user_presses_play_during_break(host):
     assert host.player.calls == ["pause"]  # we never pressed play
 
 
+def test_slow_pause_status_does_not_stop_the_break(host):
+    host.counter = 1
+    stale = {"polls": 3}
+
+    def slow_pause(p):              # Spotify on macOS: "Playing" for a moment after pause
+        if p.calls == ["pause"] and stale["polls"] > 0:
+            stale["polls"] -= 1
+            p.status = "Playing"
+        elif p.calls == ["pause"]:
+            p.status = "Paused"
+    host.player.on_state = slow_pause
+    play_through(host)
+    assert len(host.clip.started) == 1
+    assert host.player.calls == ["pause", "play"]   # clip ran to the end, then we resumed
+
+
 def test_empty_queue_skips_and_keeps_counter(host):
     host.counter = 1
     host.spotify.next["spotify:track:1"] = None

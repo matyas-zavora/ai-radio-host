@@ -440,6 +440,19 @@ class RadioHost:
         ducker.restore(300 if user_paused else self.cfg.brk.fade_up_ms)
         log.info("Back to the music")
 
+    def _wait_until_paused(self, polls: int = 10) -> None:
+        """Spotify on macOS (AppleScript) keeps reporting "Playing" for up to ~1 s after a pause;
+        MPRIS reports "Paused" at once, so on Linux this returns on the first poll. Without it the
+        break would take the stale status for the user pressing play and stop the clip."""
+        for _ in range(polls):
+            try:
+                s = self.player.state()
+            except PlayerUnavailable:
+                s = None
+            if s is not None and not s.playing:
+                return
+            time.sleep(0.2)
+
     def do_break(self, state: PlayerState, brk: Break, late: bool = False) -> None:
         p = self.plan
         p.done = True
@@ -466,6 +479,7 @@ class RadioHost:
 
         user_took_over = False
         time.sleep(0.3)  # let the pause land before reading status
+        self._wait_until_paused()
         while self.clip.running():
             time.sleep(0.2)
             try:
