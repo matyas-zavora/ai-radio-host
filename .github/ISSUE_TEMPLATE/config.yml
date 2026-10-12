@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Have an idea?
+    url: https://github.com/matyas-zavora/ai-radio-host/discussions/new?category=ideas
+    about: Suggest a feature in Discussions, where others can upvote and discuss it.
   - name: Read the README first
     url: https://github.com/matyas-zavora/ai-radio-host#readme
     about: Requirements, installation, the setup wizard, Google voices and Ollama.

@@ -35,7 +35,8 @@ REPO = "https://github.com/matyas-zavora/ai-radio-host"
 CONTACT_LINKS = [
     ("Project page", "Source code, documentation and news", REPO),
     ("Report a bug", "Something doesn't work? Tell me on GitHub", f"{REPO}/issues/new?template=bug_report.yml"),
-    ("Suggest an idea", "A feature you'd like to see", f"{REPO}/issues/new?template=feature_request.yml"),
+    ("Suggest an idea", "Share it in Discussions, where others can upvote it",
+     f"{REPO}/discussions/new?category=ideas"),
     ("Check for updates", "Latest releases and what's new", f"{REPO}/releases"),
 ]
 CREDITS = [

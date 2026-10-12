@@ -93,7 +93,7 @@ with **Reset everything and set up again** at the bottom of Settings.
 | **Host** | Everything about the host, applied immediately: language, name, personality; the **script writer** (Claude Sonnet 5, Haiku 4.5, Opus 5, or a local Ollama model); the **voice** (volume with a ▶ test, and all Google and Piper voices for the language with ▶ samples). Each language keeps its own voice. |
 | **Settings** | Breaks (how often, the transition, music volume while talking, length, when a skipped song still counts), advanced options, accounts, **Run setup again**, and **Reset everything**. |
 | **Log** | What the app is doing, including the full text of every break and why a break was skipped. |
-| **Contact** | Version, links to the project page, bug reports, ideas and updates, **Copy system info** for bug reports, and credits. |
+| **Contact** | Version, links to the project page, bug reports, ideas (in Discussions) and updates, **Copy system info** for bug reports, and credits. |
 
 <p align="center">
   <img src="docs/screenshots/ready.png" alt="On Air tab, READY: a countdown to the next break and the recent breaks" width="49%">
@@ -263,8 +263,11 @@ instead of `~/.config/ai-radio-host/`.
 
 ## Feedback
 
-Found a bug or have an idea? [Open an issue](https://github.com/matyas-zavora/ai-radio-host/issues/new/choose).
-For bugs, paste the output of **Contact → Copy system info** from the app.
+- **Found a bug?** [Report it](https://github.com/matyas-zavora/ai-radio-host/issues/new?template=bug_report.yml)
+  and paste the output of **Contact → Copy system info** from the app.
+- **Have an idea?** [Share it in Discussions](https://github.com/matyas-zavora/ai-radio-host/discussions/categories/ideas),
+  where others can upvote and discuss it.
+- **Stuck with setup?** [Ask for help](https://github.com/matyas-zavora/ai-radio-host/issues/new?template=question.yml).
 
 ## License
 

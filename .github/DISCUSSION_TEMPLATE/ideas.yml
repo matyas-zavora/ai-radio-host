@@ -1,8 +1,10 @@
-name: Idea
-description: Suggest a feature or an improvement
 title: "[Idea] "
-labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Others can upvote it and join in below.
+        For something that's broken, please [report a bug](https://github.com/matyas-zavora/ai-radio-host/issues/new?template=bug_report.yml) instead.
   - type: textarea
     id: idea
     attributes:
