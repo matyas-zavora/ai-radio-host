@@ -1,9 +1,11 @@
-"""Player control behind one interface: MPRIS (any Spotify app) → Spotifast CLI → Spotify Web API."""
+"""Player control behind one interface: MPRIS (Linux) or AppleScript (macOS) → Spotifast CLI →
+Spotify Web API."""
 
 from __future__ import annotations
 
 import logging
 import subprocess
+import sys
 import time
 
 from jeepney import DBusAddress, MessageType, new_method_call
@@ -136,6 +138,62 @@ class MprisPlayer(PlayerControl):
         if not self._trackid:
             self.state()
         self._call(lambda a: new_method_call(a, "SetPosition", "ox", (self._trackid, 0)))
+
+
+APPLESCRIPT_STATE = """
+if application "Spotify" is running then
+  tell application "Spotify"
+    if player state is stopped then return "stopped"
+    set t to current track
+    return (player state as string) & tab & (name of t) & tab & (artist of t) & tab ¬
+      & (album of t) & tab & (id of t) & tab & (duration of t) & tab ¬
+      & ((round (player position * 1000)) as string) & tab & (shuffling as string)
+  end tell
+end if
+return "notrunning"
+"""
+
+
+def parse_applescript_state(out: str) -> PlayerState | None:
+    """Parse APPLESCRIPT_STATE output. Raises PlayerUnavailable when Spotify isn't running."""
+    fields = out.rstrip("\n").split("\t")
+    if fields[0] == "notrunning":
+        raise PlayerUnavailable("the Spotify app isn't running")
+    if len(fields) < 8 or not fields[1]:
+        return None
+    status = {"playing": "Playing", "paused": "Paused"}.get(fields[0], "Stopped")
+    track = Track(title=fields[1], artists=(fields[2],), album=fields[3],
+                  uri=spotify_uri(fields[4]), duration_ms=int(fields[5] or 0))
+    return PlayerState(status=status, track=track, position_ms=int(fields[6] or 0),
+                       duration_ms=track.duration_ms or 0, shuffle=fields[7] == "true",
+                       backend=AppleScriptPlayer.name)
+
+
+def osascript(script: str) -> str:
+    try:
+        r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise PlayerUnavailable(f"osascript: {e}") from e
+    if r.returncode != 0:   # e.g. -1743: the user hasn't allowed controlling Spotify yet
+        raise PlayerUnavailable(f"AppleScript: {r.stderr.strip()[:200]}")
+    return r.stdout
+
+
+class AppleScriptPlayer(PlayerControl):
+    """The Spotify desktop app on macOS. macOS asks once for permission to control Spotify."""
+    name = "applescript"
+
+    def state(self) -> PlayerState | None:
+        return parse_applescript_state(osascript(APPLESCRIPT_STATE))
+
+    def pause(self) -> None:
+        osascript('tell application "Spotify" to pause')
+
+    def play(self) -> None:
+        osascript('tell application "Spotify" to play')
+
+    def seek_start(self) -> None:
+        osascript('tell application "Spotify" to set player position to 0')
 
 
 class CliPlayer(PlayerControl):
@@ -274,9 +332,14 @@ class FallbackPlayer(PlayerControl):
 def build_player(backends: list[str], mpris_name: str,
                  spotify: SpotifyClient | None) -> FallbackPlayer:
     made: list[PlayerControl] = []
+    mac = sys.platform == "darwin"
     for name in backends:
         if name == "mpris":
-            made.append(MprisPlayer(mpris_name))
+            if not mac:   # no D-Bus on macOS
+                made.append(MprisPlayer(mpris_name))
+        elif name == "applescript":
+            if mac:
+                made.append(AppleScriptPlayer())
         elif name == "cli":
             made.append(CliPlayer())
         elif name == "webapi":

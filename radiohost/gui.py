@@ -866,9 +866,11 @@ class Window(Adw.ApplicationWindow):
         if not self.app.running:
             self.app.quit_all()
             return False
+        mac = sys.platform == "darwin"
         dialog = Adw.AlertDialog(
             heading="Keep the radio host on air?",
-            body="The window closes but breaks keep happening. Click the microphone "
+            body="The window goes to the Dock but breaks keep happening." if mac else
+                 "The window closes but breaks keep happening. Click the microphone "
                  "in the tray (or open AI Radio Host again) to bring it back.")
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("quit", "Stop and Quit")
@@ -881,7 +883,10 @@ class Window(Adw.ApplicationWindow):
         def on_response(_d, response):
             if response == "keep":
                 self.app.run_in_background()
-                self.set_visible(False)
+                if mac:
+                    self.minimize()
+                else:
+                    self.set_visible(False)
             elif response == "quit":
                 self.app.quit_all()
         dialog.connect("response", on_response)
@@ -910,6 +915,8 @@ class App(Adw.Application):
         css.load_from_string(CSS)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        if sys.platform == "darwin":   # the tray needs D-Bus; on macOS the window minimizes instead
+            return
         try:
             from .tray import TrayIcon
             self.tray = TrayIcon(on_activate=self.activate, on_toggle_air=self._tray_toggle,

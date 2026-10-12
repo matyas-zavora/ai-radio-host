@@ -1,8 +1,9 @@
 """Lower ("duck") the music player's own audio stream while the host talks.
 
-Works through `pactl`, which talks to PulseAudio and to PipeWire (pipewire-pulse), so it
-covers nearly every Linux desktop. Only the player's stream changes, not the system
-volume. Music playing on another device (phone, speaker) can't be ducked; the loop
+On Linux it works through `pactl`, which talks to PulseAudio and to PipeWire (pipewire-pulse),
+so it covers nearly every desktop. On macOS it sets the Spotify app's own volume through
+AppleScript (there it shows up as one "stream", index 0). Only the player's volume changes, not
+the system volume. Music playing on another device (phone, speaker) can't be ducked; the loop
 falls back to pausing then.
 """
 
@@ -12,6 +13,7 @@ import json
 import logging
 import shutil
 import subprocess
+import sys
 import time
 
 from .config import STATE_DIR
@@ -21,6 +23,8 @@ log = logging.getLogger(__name__)
 PLAYER_BINARIES = ("spotify", "spotifast", "spotifyd", "ncspot", "spot", "librespot")
 STATE_FILE = STATE_DIR / "ducked.json"   # original volume, in case we crash while ducked
 USER_TOLERANCE = 3                      # % difference that means "the user moved the slider"
+MAC = sys.platform == "darwin"
+MAC_VOLUME = 'if application "Spotify" is running then tell application "Spotify" to return sound volume'
 
 
 def _pactl(*args: str) -> str:
@@ -32,6 +36,12 @@ def _pactl(*args: str) -> str:
 
 def player_streams(binaries: tuple[str, ...] = PLAYER_BINARIES) -> dict[int, int]:
     """{sink-input index: volume %} for the music player's audio streams."""
+    if MAC:
+        try:
+            out = _osascript(MAC_VOLUME)
+        except OSError:
+            return {}
+        return {0: int(out)} if out.isdigit() else {}
     if not shutil.which("pactl"):
         return {}
     try:
@@ -50,8 +60,21 @@ def player_streams(binaries: tuple[str, ...] = PLAYER_BINARIES) -> dict[int, int
     return found
 
 
+def _osascript(script: str) -> str:
+    try:
+        r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=3)
+    except subprocess.TimeoutExpired as e:
+        raise OSError("osascript timed out") from e
+    if r.returncode != 0:
+        raise OSError(r.stderr.strip() or "osascript failed")
+    return r.stdout.strip()
+
+
 def _set(index: int, percent: int) -> None:
     try:
+        if MAC:
+            _osascript(f'tell application "Spotify" to set sound volume to {max(0, percent)}')
+            return
         _pactl("set-sink-input-volume", str(index), f"{max(0, percent)}%")
     except (OSError, subprocess.TimeoutExpired) as e:
         log.debug("could not set stream %s volume: %s", index, e)
@@ -95,7 +118,7 @@ class Ducker:
                 self.released = True
                 STATE_FILE.unlink(missing_ok=True)
                 return
-            if index not in self.last_set or volume != self.current:
+            if self.last_set.get(index) != self.current:   # new stream, or a fade step
                 _set(index, self.current)
                 self.last_set[index] = self.current
 
@@ -105,13 +128,15 @@ class Ducker:
         STATE_FILE.unlink(missing_ok=True)
 
     def _fade(self, target: int, fade_ms: int) -> None:
-        start, steps = self.current, max(1, fade_ms // 80)
-        for i in range(1, steps + 1):
-            if self.released:
-                return
-            self.current = round(start + (target - start) * i / steps)
+        # Paced by the clock, not a step count: on macOS each volume change takes ~0.1 s.
+        start, t0 = self.current, time.monotonic()
+        while not self.released:
+            done = min(1.0, (time.monotonic() - t0) * 1000 / fade_ms) if fade_ms > 0 else 1.0
+            self.current = round(start + (target - start) * done)
             self.hold()
-            time.sleep(fade_ms / steps / 1000)
+            if done >= 1.0:
+                return
+            time.sleep(0.08)
 
     @staticmethod
     def recover() -> None:

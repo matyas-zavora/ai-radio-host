@@ -1,4 +1,4 @@
-"""Play a clip locally through PipeWire/Pulse, cancellable."""
+"""Play a clip locally (PipeWire/Pulse on Linux, afplay on macOS), cancellable."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-CANDIDATES = (["pw-play"], ["paplay"], ["mpv", "--no-video", "--really-quiet"])
+CANDIDATES = (["pw-play"], ["paplay"], ["mpv", "--no-video", "--really-quiet"], ["afplay"])
 
 
 class AudioError(Exception):
@@ -31,7 +31,7 @@ class ClipPlayer:
         if self.custom:
             return []
         return {"pw-play": [f"--volume={v:.2f}"], "paplay": [f"--volume={int(v * 65536)}"],
-                "mpv": [f"--volume={int(v * 100)}"]}.get(self.cmd[0], [])
+                "mpv": [f"--volume={int(v * 100)}"], "afplay": ["-v", f"{v:.2f}"]}.get(self.cmd[0], [])
 
     def start(self, path: Path) -> None:
         self.stop()

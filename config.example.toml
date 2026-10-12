@@ -45,11 +45,11 @@ en = "en_US-ryan-high"
 cs = "cs_CZ-jirka-medium"
 
 [player]
-backends = ["mpris", "cli", "webapi"]   # tried in this order
+backends = ["mpris", "applescript", "cli", "webapi"]   # tried in this order; mpris = Linux, applescript = macOS
 mpris_name = "auto"      # first running Spotify app; or "spotify", "spotifast", "spotifyd", ...
 
 [audio]
-command = ""              # "" = auto (pw-play, paplay, mpv); e.g. "mpv --no-video"
+command = ""              # "" = auto (pw-play, paplay, mpv, afplay); e.g. "mpv --no-video"
 volume = 100              # host voice volume in %, ignored with a custom command
 
 [spotify]

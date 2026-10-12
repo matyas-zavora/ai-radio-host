@@ -6,7 +6,7 @@
 
 <h3 align="center"><i>You pick the music. It does the talking.</i></h3>
 
-<p align="center">A personal AI radio host for your own Spotify playlist, on the Linux desktop</p>
+<p align="center">A personal AI radio host for your own Spotify playlist, on Linux (and, experimentally, macOS)</p>
 
 <p align="center">
   <a href="https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml"><img src="https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
@@ -14,6 +14,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/matyas-zavora/ai-radio-host" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/platform-Linux-FCC624?logo=linux&logoColor=black" alt="Linux">
+  <img src="https://img.shields.io/badge/macOS-experimental-lightgrey?logo=apple&logoColor=white" alt="macOS: experimental">
   <img src="https://img.shields.io/badge/GTK4-libadwaita-4A86CF?logo=gnome&logoColor=white" alt="GTK4 and libadwaita">
   <a href="#how-this-was-made"><img src="https://img.shields.io/badge/vibecoded%20with-Claude%20Code-D97757?logo=claude&logoColor=white" alt="Vibecoded with Claude Code"></a>
   <a href="https://github.com/matyas-zavora/ai-radio-host/discussions"><img src="https://img.shields.io/badge/discussions-ideas%20%26%20help-8957E5?logo=github&logoColor=white" alt="Discussions"></a>
@@ -49,7 +50,7 @@ with real facts about the song and the artist. Then the music carries on.
 
 ## Requirements
 
-- Linux with PipeWire or PulseAudio
+- Linux with PipeWire or PulseAudio, or **macOS** (experimental, see below)
 - **Spotify Premium** (Spotify only opens its developer API to Premium accounts)
 - The Spotify desktop app, or another Spotify player such as
   [Spotifast](https://github.com/crmne/spotifast), spotifyd, ncspot or Spot
@@ -57,6 +58,9 @@ with real facts about the song and the artist. Then the music carries on.
   - Arch: `sudo pacman -S python-gobject gtk4 libadwaita`
   - Fedora: `sudo dnf install python3-gobject gtk4 libadwaita`
   - Debian/Ubuntu: `sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-venv`
+  - macOS ([Homebrew](https://brew.sh)): `brew install python pygobject3 gtk4 libadwaita`.
+    The Spotify desktop app is the player there. The first time, macOS asks whether the
+    terminal may control Spotify: allow it.
 - For the AI, one of:
   - an [Anthropic](https://platform.claude.com) API account with a few dollars of credit (best results), or
   - [Ollama](https://ollama.com) with a local model (free, weaker results)
@@ -153,8 +157,12 @@ The app itself is free and open source.
 <details>
 <summary><b>Does it work on Windows or macOS?</b></summary>
 
-Not yet. It's built on Linux desktop technology (GTK4, MPRIS, PulseAudio or
-PipeWire). If you'd like another platform, say so in
+**macOS: experimentally.** It controls the Spotify app through AppleScript, plays the
+voice with `afplay` and lowers Spotify's own volume for the talk-over transition.
+There's no tray icon on macOS; "Keep Running" minimizes the window to the Dock
+instead. It hasn't been tried on a real Mac much yet, so reports are very welcome.
+
+**Windows: not yet.** If you'd like it, say so in
 [Ideas](https://github.com/matyas-zavora/ai-radio-host/discussions/categories/ideas).
 
 </details>
@@ -261,7 +269,7 @@ after 3 minutes and says what to check. Still stuck?
 A tray icon shows the state (grey off, white on air, red talking). Left-click
 opens the window; right-click has On air, Break after this song and Quit. If
 you close the window while on air, the app asks whether to keep running in the
-background.
+background. (On macOS there's no tray; the window minimizes to the Dock.)
 
 ## Talking over the music
 
@@ -271,7 +279,8 @@ starts talking over the end of the song, the next song begins quietly under the
 voice about halfway through, and the music fades back up afterwards.
 
 - It only works when the music plays **on this computer**, because it lowers
-  the player's own audio stream (PulseAudio/PipeWire). With a phone or speaker,
+  the player's own audio stream (PulseAudio/PipeWire on Linux, the Spotify app's
+  volume on macOS). With a phone or speaker,
   or a very short song, that break pauses instead.
 - If you pause, skip or change the volume yourself during a break, the app
   steps back immediately. If it crashes while the music is lowered, the volume
@@ -327,7 +336,7 @@ plainer breaks with the occasional made-up detail.
 ## How it works
 
 ```
- Spotify app ──MPRIS (D-Bus)──► player.py ◄── Spotify Web API fallback
+ Spotify app ──MPRIS / AppleScript──► player.py ◄── Spotify Web API fallback
                                   │ track, position, pause/play
                                   ▼
                               loop.py ── break due ──► spotify_api.py: GET /me/player/queue
@@ -340,8 +349,8 @@ plainer breaks with the occasional made-up detail.
 ```
 
 - The current song and its position come from the Spotify app over MPRIS, the
-  standard Linux media-player interface: local, fast, no rate limits. If MPRIS
-  doesn't answer or doesn't report the position, the Spotify Web API is used.
+  standard Linux media-player interface (on macOS: AppleScript): local, fast, no
+  rate limits. If that doesn't answer or doesn't report the position, the Spotify Web API is used.
 - The queue only exists in the Spotify Web API. It is read when a break is
   due, again about 30 s before the end (so a changed queue can be regenerated),
   and a final time just before the host starts. If the song that's about to
@@ -381,7 +390,7 @@ and [`.env.example`](.env.example) for every option, if you prefer editing files
 
 ## Known limitations
 
-- Linux only (GTK4, MPRIS, PulseAudio/PipeWire).
+- macOS support is experimental and barely tried on a real Mac. No Windows support.
 - Spotify's developer "development mode" allows up to 5 users per developer
   app, which is why every user registers their own (the wizard guides you).
 - The official Spotify desktop app hasn't been tested much yet. Spotifast is
@@ -406,7 +415,7 @@ instead of `~/.config/ai-radio-host/`.
 
 | Module | Role |
 |---|---|
-| `radiohost/player.py` | Player control: MPRIS (any Spotify app), Spotifast CLI, Spotify Web API, with fallback |
+| `radiohost/player.py` | Player control: MPRIS (any Spotify app), AppleScript (macOS), Spotifast CLI, Spotify Web API, with fallback |
 | `radiohost/spotify_api.py` | PKCE login, token refresh, rate-limit back-off, queue |
 | `radiohost/loop.py` | Counting songs, planning breaks, queue checks, pause or talk-over |
 | `radiohost/facts.py` | Wikipedia and MusicBrainz lookups |
@@ -445,7 +454,7 @@ conversation. Every commit made this way says so (`Co-Authored-By: Claude`).
 
 
 - **It's tested, but not everything.** Automated tests run on every change
-  (Python 3.11–3.14), and the main features were tried on a real setup (Arch
+  (Python 3.11–3.14, on Linux and macOS), and the main features were tried on a real setup (Arch
   Linux, Spotifast). What hasn't been tried by a person yet is listed under
   [Known limitations](#known-limitations).
 - **Bugs are likely.** Reports are very welcome and help a lot.

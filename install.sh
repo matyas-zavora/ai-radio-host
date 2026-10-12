@@ -5,6 +5,7 @@
 #   ./install.sh --uninstall  remove the app (keeps ~/.config/ai-radio-host and caches)
 #
 # Needs system packages (Arch): python python-gobject gtk4 libadwaita pipewire
+#                     (macOS, Homebrew): python pygobject3 gtk4 libadwaita
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
@@ -25,7 +26,11 @@ if [ "${1:-}" = "--uninstall" ]; then
   exit 0
 fi
 
-PY=/usr/bin/python3
+if [ "$(uname)" = Darwin ]; then
+  PY="$(brew --prefix 2>/dev/null)/bin/python3"   # Homebrew's Python has PyGObject
+else
+  PY=/usr/bin/python3
+fi
 if ! "$PY" -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")' 2>/dev/null; then
   echo "Missing GTK4/libadwaita for Python. See the README (Requirements) for your distribution."
   exit 1
@@ -36,7 +41,7 @@ if [ "$ADW" -lt 6 ]; then
   exit 1
 fi
 command -v pw-play >/dev/null || command -v paplay >/dev/null || command -v mpv >/dev/null \
-  || echo "Warning: no audio player found (pw-play, paplay or mpv); the host won't be audible."
+  || command -v afplay >/dev/null || echo "Warning: no audio player found (pw-play, paplay or mpv); the host won't be audible."
 
 echo "== Installing into $APP_DIR"
 # --system-site-packages: PyGObject comes from the system, not from PyPI.

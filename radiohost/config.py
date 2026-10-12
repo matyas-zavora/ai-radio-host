@@ -80,7 +80,7 @@ class TTSConfig:
 
 @dataclass
 class PlayerConfig:
-    backends: list[str] = field(default_factory=lambda: ["mpris", "cli", "webapi"])
+    backends: list[str] = field(default_factory=lambda: ["mpris", "applescript", "cli", "webapi"])
     mpris_name: str = "auto"       # auto = first running Spotify app; or e.g. "spotify"
 
 
@@ -91,7 +91,7 @@ class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
     player: PlayerConfig = field(default_factory=PlayerConfig)
-    audio_command: str = ""        # "" = auto (pw-play, paplay, mpv)
+    audio_command: str = ""        # "" = auto (pw-play, paplay, mpv, afplay)
     audio_volume: int = 100        # host voice volume, 0-100 %
     spotify_client_id: str = ""
     spotify_redirect_uri: str = "http://127.0.0.1:8888/callback"
