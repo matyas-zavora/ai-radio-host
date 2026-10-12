@@ -4,7 +4,9 @@
 
 <h1 align="center">AI Radio Host</h1>
 
-<p align="center"><b>Your own AI radio DJ between the songs of your Spotify playlist</b></p>
+<h3 align="center"><i>You pick the music. It does the talking.</i></h3>
+
+<p align="center">A personal AI radio host for your own Spotify playlist, on the Linux desktop</p>
 
 <p align="center">
   <a href="https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml"><img src="https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>

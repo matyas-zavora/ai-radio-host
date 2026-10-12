@@ -105,7 +105,8 @@ class SetupWizard(Adw.Dialog):
     def _welcome(self) -> Adw.NavigationPage:
         status = Adw.StatusPage(
             icon_name="dev.zavoram.RadioHost", title="Welcome to AI Radio Host",
-            description="Every few songs, an AI host introduces the next song in your Spotify "
+            description="You pick the music. It does the talking.\n\n"
+                        "Every few songs, an AI host introduces the next song in your Spotify "
                         "playlist.\n\nSetup takes about 5 minutes. You'll need:\n"
                         "• Spotify Premium\n"
                         "• an Anthropic account with a few dollars of credit "

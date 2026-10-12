@@ -380,7 +380,8 @@ class Window(Adw.ApplicationWindow):
     def _build_contact(self):
         page = Adw.PreferencesPage()
         header = Adw.StatusPage(icon_name="dev.zavoram.RadioHost", title="AI Radio Host",
-                                description=f"Version {app_version()} · by Matyáš Závora\n"
+                                description="You pick the music. It does the talking.\n\n"
+                                            f"Version {app_version()} · by Matyáš Závora\n"
                                             "Free and open source (MIT license)")
         g = Adw.PreferencesGroup()
         g.add(header)
