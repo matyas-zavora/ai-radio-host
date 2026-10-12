@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # The GUI (GTK) and the optional voice packages aren't needed for the tests.
+      - name: Install
+        run: pip install -e . pytest pyflakes
+
+      - name: Lint
+        run: python -m pyflakes radiohost tests
+
+      - name: Check shell scripts
+        run: for f in install.sh tools/gcp-billing-cap/setup.sh; do bash -n "$f"; done
+
+      - name: Test
+        run: python -m pytest -v

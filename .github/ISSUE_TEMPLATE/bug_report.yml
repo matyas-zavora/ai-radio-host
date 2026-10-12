@@ -1,7 +1,21 @@
 name: Bug report
 description: Something doesn't work as it should
+title: "[Bug] "
 labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **never paste API keys**, the contents of your `.env`, or Spotify tokens.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you report
+      options:
+        - label: I'm on the latest version (Contact → Check for updates, or `git pull && ./install.sh`)
+          required: true
+        - label: I searched the existing issues and this isn't one of them
+          required: true
   - type: textarea
     id: what
     attributes:
@@ -15,12 +29,56 @@ body:
       label: How can it be reproduced?
       placeholder: |
         1. Turn on air with ...
-        2. ...
+        2. Wait until ...
+        3. ...
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part is affected?
+      options:
+        - Setup wizard / installation
+        - Spotify connection or login
+        - Breaks (timing, wrong song, skipped)
+        - Talking over the music (volume fades)
+        - The host's script (facts, language, quality)
+        - Voice (Google or Piper)
+        - The app window or tray icon
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: player
+    attributes:
+      label: Spotify player
+      options:
+        - Official Spotify desktop app
+        - Spotifast
+        - spotifyd
+        - ncspot
+        - Spot
+        - Music plays on another device (phone, speaker)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: transition
+    attributes:
+      label: Transition
+      options:
+        - Pause the music
+        - Talk over the music
+  - type: dropdown
+    id: ai
+    attributes:
+      label: Script writer
+      options:
+        - Claude
+        - Local model (Ollama)
   - type: textarea
     id: system
     attributes:
       label: System info
-      description: In the app, Contact → Copy system info, then paste it here.
+      description: In the app, **Contact → Copy system info**, then paste it here.
       render: text
     validations:
       required: true
@@ -28,5 +86,5 @@ body:
     id: log
     attributes:
       label: Log
-      description: Relevant lines from the Log tab, if any. Remove anything private.
+      description: Relevant lines from the **Log** tab, if any. Check them for anything private first.
       render: text

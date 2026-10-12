@@ -1,0 +1,34 @@
+name: Question or setup help
+description: Stuck with installation, the Spotify app, keys or voices?
+title: "[Help] "
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most setup questions are answered in the [README](https://github.com/matyas-zavora/ai-radio-host#readme).
+        Please **never paste API keys**, the contents of your `.env`, or Spotify tokens.
+  - type: textarea
+    id: question
+    attributes:
+      label: What do you need help with?
+    validations:
+      required: true
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where are you stuck?
+      options:
+        - Installing
+        - Spotify developer app / login
+        - Anthropic API key
+        - Ollama (local model)
+        - Google Cloud voices
+        - Using the app
+        - Something else
+  - type: textarea
+    id: system
+    attributes:
+      label: System info
+      description: If the app opens, **Contact → Copy system info**, then paste it here.
+      render: text

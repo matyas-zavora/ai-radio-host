@@ -1,14 +1,21 @@
 name: Idea
 description: Suggest a feature or an improvement
+title: "[Idea] "
 labels: [enhancement]
 body:
   - type: textarea
     id: idea
     attributes:
       label: What would you like?
+      description: Describe it the way you'd use it.
     validations:
       required: true
   - type: textarea
     id: why
     attributes:
       label: Why would it help?
+      description: What's missing or annoying today?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you've tried instead?

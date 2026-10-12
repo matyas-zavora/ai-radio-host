@@ -1,5 +1,7 @@
 # AI Radio Host
 
+[![Tests](https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml/badge.svg)](https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml)
+
 A personal radio host for your Spotify playlist, for the Linux desktop.
 
 You play music in Spotify as usual. Every few songs (default 3), an AI host
