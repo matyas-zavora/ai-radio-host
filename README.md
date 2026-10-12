@@ -1,8 +1,21 @@
-# AI Radio Host
+<p align="center">
+  <img src="data/icons/hicolor/scalable/apps/dev.zavoram.RadioHost.svg" alt="AI Radio Host logo" width="120">
+</p>
 
-[![Tests](https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml/badge.svg)](https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml)
+<h1 align="center">AI Radio Host</h1>
 
-A personal radio host for your Spotify playlist, for the Linux desktop.
+<p align="center"><b>Your own AI radio DJ between the songs of your Spotify playlist</b></p>
+
+<p align="center">
+  <a href="https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml"><img src="https://github.com/matyas-zavora/ai-radio-host/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/matyas-zavora/ai-radio-host/releases/latest"><img src="https://img.shields.io/github/v/release/matyas-zavora/ai-radio-host" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/matyas-zavora/ai-radio-host" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/platform-Linux-FCC624?logo=linux&logoColor=black" alt="Linux">
+  <img src="https://img.shields.io/badge/GTK4-libadwaita-4A86CF?logo=gnome&logoColor=white" alt="GTK4 and libadwaita">
+  <a href="#how-this-was-made"><img src="https://img.shields.io/badge/vibecoded%20with-Claude%20Code-D97757?logo=claude&logoColor=white" alt="Vibecoded with Claude Code"></a>
+  <a href="https://github.com/matyas-zavora/ai-radio-host/discussions"><img src="https://img.shields.io/badge/discussions-ideas%20%26%20help-8957E5?logo=github&logoColor=white" alt="Discussions"></a>
+</p>
 
 You play music in Spotify as usual. Every few songs (default 3), an AI host
 introduces the next song in 15–25 seconds of speech, the way a radio DJ does,
@@ -275,7 +288,24 @@ design decisions and tried things out on my own setup, and
 the code, the tests and most of this README, step by step in one long
 conversation. Every commit made this way says so (`Co-Authored-By: Claude`).
 
-What that means for you:
+### Why AI?
+
+- **The code:** building it with AI was much easier and faster for me than
+  writing it myself. The trade-off is that I don't know the code in detail. For
+  me the app is partly a black box: I know what it does and how it behaves, but
+  not every line. That's one more reason why bug reports matter, and why the
+  tests run automatically on every change.
+- **The break scripts:** what the host says changes every time. It depends on
+  the song, the facts found and the previous song. That can't be prepared in
+  advance or programmed as fixed rules, so an AI writes it, using only the facts
+  it was given.
+- **The voice:** because every break is different, pre-recording them isn't
+  possible, whether with my voice or a paid voice actor. Speech synthesis
+  (Google or the local Piper) reads the script aloud. No real person's voice is
+  imitated: these are stock synthetic voices, not voice clones.
+
+### What that means for you
+
 
 - **It's tested, but not everything.** Automated tests run on every change
   (Python 3.11–3.14), and the main features were tried on a real setup (Arch
