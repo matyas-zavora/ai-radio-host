@@ -384,7 +384,7 @@ class RadioHost:
             except PlayerUnavailable as e:
                 log.warning("Resume attempt %d failed: %s", attempt + 1, e)
                 time.sleep(1)
-        log.error("Could not resume playback — press play in Spotifast")
+        log.error("Could not resume playback — press play in Spotify")
 
 
 def _fmt(ms: int) -> str:

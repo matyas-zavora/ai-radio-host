@@ -5,5 +5,5 @@ Comment=AI radio host talk breaks between your Spotify songs
 Exec=@VENV@/bin/radiohost-gui
 Icon=dev.zavoram.RadioHost
 Categories=AudioVideo;Audio;
-Keywords=spotify;radio;dj;spotifast;
+Keywords=spotify;radio;dj;music;
 StartupNotify=true

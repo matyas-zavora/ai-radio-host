@@ -318,7 +318,7 @@ class Window(Adw.ApplicationWindow):
                 self.row_player.set_subtitle(
                     f"{st.backend} · shuffle {'on' if st.shuffle else 'off'}")
             elif running:
-                self.row_track.set_subtitle("Waiting for Spotifast…")
+                self.row_track.set_subtitle("Waiting for Spotify…")
                 self.row_player.set_subtitle("not reachable" if st is None else "nothing loaded")
             n = host.cfg.brk.every_n_tracks
             self.row_count.set_subtitle(f"{min(host.counter, n)} / {n} songs")

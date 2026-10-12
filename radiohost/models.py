@@ -11,6 +11,20 @@ def _norm(s: str) -> str:
     return "".join(ch for ch in s.lower() if ch.isalnum())
 
 
+def spotify_uri(value: str | None) -> str | None:
+    """Normalize the forms players use to spotify:track:ID.
+    Official client: https://open.spotify.com/track/ID or /com/spotify/track/ID."""
+    if not value:
+        return None
+    v = value.split("?")[0].rstrip("/")
+    for marker in ("open.spotify.com/", "/com/spotify/"):
+        if marker in v:
+            kind_id = v.split(marker, 1)[1].split("/")
+            if len(kind_id) >= 2:
+                return f"spotify:{kind_id[-2]}:{kind_id[-1]}"
+    return v if v.startswith("spotify:") else None
+
+
 @dataclass(frozen=True)
 class Track:
     title: str

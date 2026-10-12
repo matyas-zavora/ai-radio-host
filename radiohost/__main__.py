@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     common.add_argument("--config", type=Path, help="config.toml (default: ./config.toml, "
                                                     "then ~/.config/ai-radio-host/config.toml)")
     common.add_argument("-v", "--verbose", action="store_true", help="debug logging")
-    ap = argparse.ArgumentParser(prog="radiohost", description="AI radio host for Spotifast")
+    ap = argparse.ArgumentParser(prog="radiohost", description="AI radio host for Spotify")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     run = sub.add_parser("run", parents=[common], help="run the radio host")

@@ -1,7 +1,7 @@
 [project]
 name = "ai-radio-host"
 version = "0.1.0"
-description = "AI radio host talk breaks between Spotify tracks (Spotifast on Linux)"
+description = "AI radio host talk breaks between your Spotify songs (Linux)"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=1.0",

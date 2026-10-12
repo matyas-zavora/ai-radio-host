@@ -36,7 +36,7 @@ cs = "cs_CZ-jirka-medium"
 
 [player]
 backends = ["mpris", "cli", "webapi"]   # tried in this order
-mpris_name = "spotifast"
+mpris_name = "auto"      # first running Spotify app; or "spotify", "spotifast", "spotifyd", ...
 
 [audio]
 command = ""              # "" = auto (pw-play, paplay, mpv); e.g. "mpv --no-video"

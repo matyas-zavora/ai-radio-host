@@ -1,4 +1,4 @@
-"""Player control behind one interface: MPRIS → spotifast CLI → Spotify Web API."""
+"""Player control behind one interface: MPRIS (any Spotify app) → Spotifast CLI → Spotify Web API."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from jeepney import DBusAddress, MessageType, new_method_call
 from jeepney.io.blocking import DBusConnection, open_dbus_connection
 from jeepney.wrappers import Properties
 
-from .models import PlayerState, Track
+from .models import PlayerState, Track, spotify_uri
 from .spotify_api import SpotifyClient, SpotifyError, track_from_json
 
 log = logging.getLogger(__name__)
@@ -38,17 +38,52 @@ class PlayerControl:
         raise NotImplementedError
 
 
+# Spotify players that expose MPRIS, in the order "auto" tries them.
+KNOWN_PLAYERS = ("spotify", "spotifast", "spotifyd", "ncspot", "spot")
+NO_POSITION_AFTER = 3.0   # seconds of "Playing at 0:00" before we stop trusting Position
+
+
 class MprisPlayer(PlayerControl):
     name = "mpris"
 
-    def __init__(self, player_name: str = "spotifast"):
-        self.addr = DBusAddress("/org/mpris/MediaPlayer2",
-                                bus_name=f"org.mpris.MediaPlayer2.{player_name}",
-                                interface="org.mpris.MediaPlayer2.Player")
+    def __init__(self, player_name: str = "auto"):
+        self.player_name = player_name
+        self.addr: DBusAddress | None = None
         self._conn: DBusConnection | None = None
         self._trackid: str | None = None
+        self._zero_since: float | None = None
 
-    def _call(self, msg):
+    def _bus_name(self) -> str:
+        """Resolve which MPRIS service to talk to ("auto" = first running Spotify player)."""
+        prefix = "org.mpris.MediaPlayer2."
+        if self.player_name != "auto":
+            return prefix + self.player_name
+        names = self._raw_call(new_method_call(
+            DBusAddress("/org/freedesktop/DBus", bus_name="org.freedesktop.DBus",
+                        interface="org.freedesktop.DBus"), "ListNames"))[0]
+        for player in KNOWN_PLAYERS:   # spotifyd registers e.g. "spotifyd.instance1234"
+            for n in names:
+                if n == prefix + player or n.startswith(f"{prefix}{player}.instance"):
+                    return n
+        raise PlayerUnavailable("no Spotify player found on D-Bus")
+
+    def _address(self) -> DBusAddress:
+        if self.addr is None:
+            self.addr = DBusAddress("/org/mpris/MediaPlayer2", bus_name=self._bus_name(),
+                                    interface="org.mpris.MediaPlayer2.Player")
+            log.info("Using MPRIS player %s", self.addr.bus_name)
+        return self.addr
+
+    def _call(self, make_msg):
+        """make_msg(address) -> message. Re-resolves the player if it went away."""
+        try:
+            return self._raw_call(make_msg(self._address()))
+        except PlayerUnavailable:
+            if self.player_name == "auto":
+                self.addr = None  # maybe another Spotify app is running now
+            raise
+
+    def _raw_call(self, msg):
         try:
             if self._conn is None:
                 self._conn = open_dbus_connection(bus="SESSION")
@@ -63,7 +98,7 @@ class MprisPlayer(PlayerControl):
         return reply.body
 
     def state(self) -> PlayerState | None:
-        props = {k: v[1] for k, v in self._call(Properties(self.addr).get_all())[0].items()}
+        props = {k: v[1] for k, v in self._call(lambda a: Properties(a).get_all())[0].items()}
         meta = {k: v[1] for k, v in props.get("Metadata", {}).items()}
         status = props.get("PlaybackStatus", "Stopped")
         if not meta.get("xesam:title"):
@@ -73,28 +108,39 @@ class MprisPlayer(PlayerControl):
             title=meta.get("xesam:title", ""),
             artists=tuple(meta.get("xesam:artist", [])),
             album=meta.get("xesam:album", ""),
-            uri=meta.get("xesam:url") or None,
+            uri=spotify_uri(meta.get("xesam:url")) or spotify_uri(meta.get("mpris:trackid")),
             duration_ms=meta.get("mpris:length", 0) // 1000,
         )
+        position_ms = props.get("Position", 0) // 1000
+        # Some clients (the official Spotify app, historically) always report Position 0.
+        # Then let the fallback chain (Web API) provide state instead.
+        if status == "Playing" and position_ms == 0:
+            now = time.monotonic()
+            self._zero_since = self._zero_since or now
+            if now - self._zero_since > NO_POSITION_AFTER:
+                raise PlayerUnavailable("player reports no playback position")
+        else:
+            self._zero_since = None
         return PlayerState(status=status, track=track,
-                           position_ms=props.get("Position", 0) // 1000,
+                           position_ms=position_ms,
                            duration_ms=track.duration_ms or 0,
                            shuffle=props.get("Shuffle"), backend=self.name)
 
     def pause(self) -> None:
-        self._call(new_method_call(self.addr, "Pause"))
+        self._call(lambda a: new_method_call(a, "Pause"))
 
     def play(self) -> None:
-        self._call(new_method_call(self.addr, "Play"))
+        self._call(lambda a: new_method_call(a, "Play"))
 
     def seek_start(self) -> None:
         if not self._trackid:
             self.state()
-        self._call(new_method_call(self.addr, "SetPosition", "ox", (self._trackid, 0)))
+        self._call(lambda a: new_method_call(a, "SetPosition", "ox", (self._trackid, 0)))
 
 
 class CliPlayer(PlayerControl):
-    """`spotifast` CLI. Its output has no track URI, so matching falls back to title+artist."""
+    """`spotifast` CLI (only with the Spotifast player). Its output has no track URI, so matching
+    falls back to title+artist."""
     name = "cli"
 
     def __init__(self, binary: str = "spotifast"):

@@ -1,10 +1,14 @@
 # AI Radio Host
 
-A personal radio host for your Spotify playlist. You play music in
-[Spotifast](https://github.com/crmne/spotifast) as usual. Every N songs
-(default 3), right before the next song starts, playback pauses, an AI host
-introduces the upcoming song in 15–25 seconds of speech, and then the music
-resumes.
+A personal radio host for your Spotify playlist. You play music in the
+Spotify desktop app as usual. Every N songs (default 3), right before the next
+song starts, playback pauses, an AI host introduces the upcoming song in 15–25
+seconds of speech, and then the music resumes.
+
+Needs Spotify Premium (Spotify's developer API requires it) and Linux.
+Alternative Spotify players work too, for example
+[Spotifast](https://github.com/crmne/spotifast), spotifyd, ncspot and Spot.
+The app finds whichever one is running.
 
 - **Real facts only.** Facts come from Wikipedia (in your host language, then
   English) and MusicBrainz. Claude is told to use only those facts. When none
@@ -18,7 +22,7 @@ resumes.
 ## How it works
 
 ```
- Spotifast ──MPRIS (D-Bus)──► player.py ◄── spotifast CLI / Web API fallback
+ Spotify app ──MPRIS (D-Bus)──► player.py ◄── Web API fallback
                                   │ track, position, pause/play
                                   ▼
                               loop.py ── every N tracks ──► spotify_api.py: GET /me/player/queue
@@ -30,9 +34,12 @@ resumes.
                  ~0.8 s before the song ends: pause → audio.py plays clip → resume
 ```
 
-- The **current track and its position** come from Spotifast over MPRIS. It's
-  local, fast and has no rate limits. If MPRIS stops answering, the app falls
-  back to the `spotifast` CLI, then to the Spotify Web API.
+- The **current track and its position** come from the Spotify app over MPRIS,
+  the standard Linux media-player interface. It's local, fast and has no rate
+  limits. If MPRIS doesn't answer, or doesn't report the playback position (the
+  official Spotify app has had this bug), the app uses the Spotify Web API
+  instead. That works with any Spotify Connect device. With Spotifast, its
+  `spotifast` CLI is an extra fallback.
 - The **queue** only exists in the Web API (`GET /me/player/queue`). It is read
   when a break is due (at the start of the song before the break), again 30 s
   before the end (so a changed queue can be regenerated), and a final time 8 s
@@ -50,13 +57,14 @@ resumes.
 | You press play during a break | The clip stops and you keep control. |
 | Shuffle | Works if Spotify reports the shuffled order. Check this with `radiohost queue-test`. |
 | Queue empty / next item is a podcast | The break is skipped. The counter stays, so the next song gets the break. |
-| Spotifast closed or restarted | The app logs it, waits, and picks up again when it's back. |
+| Spotify closed or restarted | The app logs it, waits, and picks up again when it's back. |
 | Spotify 429 / expired token | It backs off by `Retry-After`. Tokens refresh automatically. |
 | Facts, LLM or TTS fail | The break is skipped silently and the music keeps going. If Google TTS fails or hits its budget, Piper is used. |
 
 ## Install
 
-Requires Linux, Spotifast, PipeWire/PulseAudio and, on Arch,
+Requires Linux, Spotify Premium, the Spotify desktop app (or another Spotify
+player), PipeWire/PulseAudio and, on Arch,
 `sudo pacman -S python-gobject gtk4 libadwaita`.
 
 ```bash
@@ -80,7 +88,7 @@ Then continue with the accounts below (from step 2).
 
 ### 1. Install
 
-Requires Python 3.11+, Linux, Spotifast running, and PipeWire or PulseAudio.
+Requires Python 3.11+, Linux, a running Spotify app, and PipeWire or PulseAudio.
 
 ```bash
 cd ~/projects/ai-radio-host
@@ -209,7 +217,7 @@ backend order and audio command.
 
 | Module | Role |
 |---|---|
-| `radiohost/player.py` | `PlayerControl` interface: MPRIS, spotifast CLI, Web API, plus a fallback chain |
+| `radiohost/player.py` | `PlayerControl` interface: MPRIS (any Spotify app), Spotifast CLI, Web API, plus a fallback chain |
 | `radiohost/spotify_api.py` | PKCE login, token refresh, 429 back-off, queue, playback |
 | `radiohost/facts.py` | Wikipedia + MusicBrainz lookups |
 | `radiohost/script.py` | Claude prompt and validation |

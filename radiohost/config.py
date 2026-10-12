@@ -61,7 +61,7 @@ class TTSConfig:
 @dataclass
 class PlayerConfig:
     backends: list[str] = field(default_factory=lambda: ["mpris", "cli", "webapi"])
-    mpris_name: str = "spotifast"
+    mpris_name: str = "auto"       # auto = first running Spotify app; or e.g. "spotify"
 
 
 @dataclass
