@@ -1,4 +1,10 @@
-"""Write the host's talk break with Claude."""
+"""Write the host's talk break with Claude or a local model.
+
+The model never receives data from Spotify. It gets only facts from Wikipedia and
+MusicBrainz, and refers to the songs through placeholders ({song}, {artist},
+{prev_song}, {prev_artist}) that are filled in locally afterwards. Spotify's terms
+forbid "ingesting Spotify Content" (including metadata) into AI models.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +16,7 @@ import anthropic
 import httpx
 
 from .config import LANGUAGES, BreakConfig, HostConfig, LLMConfig
+from .facts import base_title
 from .models import Facts, Track
 
 log = logging.getLogger(__name__)
@@ -26,19 +33,22 @@ Between songs you do a short talk break that introduces the NEXT song, the way a
 charismatic radio host would: a bit of personality, a smooth transition, then the \
 song and artist name.
 
+You are not told the song's name directly. Write {{song}} where its title goes and \
+{{artist}} where the artist's name goes; they are replaced with the real names before \
+you are heard. Name the next song and its artist once each, using these placeholders, \
+not the names from the facts, so nothing is said twice.
+
 Rules:
-- Speak {language}. Song titles, artist and album names stay as they are.
+- Speak {language}. Song titles, artist and album names stay as they are. Put the \
+placeholders where a name can stand unchanged (no grammatical endings attached).
 - Length: {min_words}-{max_words} words ({min_s}-{max_s} seconds spoken). Never longer.
 - Use ONLY the facts listed in the FACTS section. Never add trivia, dates, chart \
 positions, awards, band members, anecdotes or anything else from your own memory, \
 even if you are sure it is true.
 - If FACTS is empty, keep it a simple, warm introduction of the song and artist, \
 with no factual claims at all.
-- The Spotify release date can belong to a reissue, remaster or compilation. Only \
-call it the song's release year if nothing suggests a reissue.
 - The listener is alone with their own playlist. Don't mention callers, \
 advertising, the station name, the weather, or the time of day.
-- You may mention the song that just finished in passing.
 - Output only the words to be spoken: plain text, no quotes, no stage directions, \
 no emojis, no markdown, no lists.
 """
@@ -49,6 +59,15 @@ class ScriptError(Exception):
 
 
 THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S)  # reasoning models (qwen3, deepseek-r1)
+PLACEHOLDER = re.compile(r"\{\s*(song|artist|prev_song|prev_artist)\s*\}|\{(\w+)\}", re.I)
+AND = {"en": "and", "cs": "a"}
+
+
+def _join_artists(artists: tuple[str, ...], lang: str) -> str:
+    names = list(dict.fromkeys(a for a in artists if a))   # "NOTION, NOTION" -> "NOTION"
+    if len(names) <= 1:
+        return names[0] if names else ""
+    return ", ".join(names[:-1]) + f" {AND.get(lang, 'and')} " + names[-1]
 
 
 class ScriptWriter:
@@ -78,26 +97,37 @@ class ScriptWriter:
         )
 
     @staticmethod
-    def _describe(track: Track) -> str:
-        lines = [f"Title: {track.title}", f"Artist: {track.artist}"]
-        if track.album:
-            lines.append(f"Album: {track.album}")
-        if track.release_date:
-            lines.append(f"Spotify album release date: {track.release_date}")
-        return "\n".join(lines)
+    def build_prompt(facts: Facts, has_previous: bool) -> str:
+        """The user message. Contains no Spotify data: only facts and placeholders."""
+        parts = ["NEXT SONG\nRefer to it as {song} by {artist}."]
+        if has_previous:
+            parts.append("SONG THAT JUST FINISHED\nYou may mention it in passing as {prev_song} "
+                         "by {prev_artist}. Say nothing else about it.")
+        parts.append("FACTS ABOUT THE NEXT SONG (from Wikipedia and MusicBrainz)\n" + (
+            "\n".join(f"- {f}" for f in facts.items) if facts else "(none)"))
+        parts.append("Write the talk break now.")
+        return "\n\n".join(parts)
+
+    def fill(self, text: str, next_track: Track, previous: Track | None) -> str:
+        """Put the real names into the placeholders, locally."""
+        values = {"song": base_title(next_track.title),
+                  "artist": _join_artists(next_track.artists, self.lang)}
+        if previous:
+            values.update(prev_song=base_title(previous.title),
+                          prev_artist=_join_artists(previous.artists, self.lang))
+        text = PLACEHOLDER.sub(lambda m: values.get((m.group(1) or "").lower(), m.group(0)), text)
+        if PLACEHOLDER.search(text):
+            raise ScriptError(f"unknown placeholder left in script: {PLACEHOLDER.search(text).group(0)}")
+        return text
 
     def write(self, next_track: Track, facts: Facts, previous: Track | None = None) -> str:
-        parts = [f"NEXT SONG\n{self._describe(next_track)}"]
-        if previous:
-            parts.append(f"SONG THAT JUST FINISHED\n{previous.artist} – {previous.title}")
-        parts.append("FACTS\n" + ("\n".join(f"- {f}" for f in facts.items) if facts else "(none)"))
-        parts.append("Write the talk break now.")
-        user = "\n\n".join(parts)
+        user = self.build_prompt(facts, previous is not None)
 
         text = self._claude(user) if self.llm.provider == "anthropic" else self._ollama(user)
         text = text.strip('"“”„').strip()
         if not text:
             raise ScriptError("LLM returned no text")
+        text = self.fill(text, next_track, previous)
         words = len(text.split())
         if words > self.max_words * 1.4:
             raise ScriptError(f"script too long ({words} words, max {self.max_words})")

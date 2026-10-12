@@ -103,11 +103,12 @@ class FactFinder:
                 bits.append(f"({a['disambiguation']})")
             tags = [t["name"] for t in sorted(a.get("tags", []), key=lambda t: -t.get("count", 0))
                     if t.get("count", 0) > 0 and _CLEAN_TAG.fullmatch(t["name"])][:4]
+            name = a.get("name", artist)  # MusicBrainz's own spelling, not Spotify's
             out = []
             if any(bits):
-                out.append(f"MusicBrainz: {artist} " + ", ".join(b for b in bits if b) + ".")
+                out.append(f"MusicBrainz: {name} " + ", ".join(b for b in bits if b) + ".")
             if tags:
-                out.append(f"MusicBrainz: genre tags for {artist}: {', '.join(tags)}.")
+                out.append(f"MusicBrainz: genre tags for {name}: {', '.join(tags)}.")
             return out
         return []
 

@@ -13,6 +13,10 @@ The app finds whichever one is running.
 - **Real facts only.** Facts come from Wikipedia (in your host language, then
   English) and MusicBrainz. The AI is told to use only those facts. When none
   are found, the host does a simple intro with no trivia.
+- **No Spotify data goes to the AI.** Spotify's terms forbid feeding Spotify
+  content, including song metadata, into AI models. The AI only sees the
+  Wikipedia/MusicBrainz facts and writes `{song}` and `{artist}` placeholders;
+  the app fills in the names locally afterwards.
 - **No gap.** The break (facts → script → speech) is prepared while the current
   song is still playing.
 - **English or Czech.** Set `host.language`, or pass `--lang cs` / `--lang en`.
