@@ -70,10 +70,17 @@ def _osascript(script: str) -> str:
     return r.stdout.strip()
 
 
+def _mac_volume(percent: int) -> int:
+    """Spotify on macOS stores one less than it's set to (set 16 → reads 15; 0 and 100 are exact),
+    so without this every restore would leave the music 1 % quieter than before the break."""
+    percent = max(0, min(100, percent))
+    return percent + 1 if 0 < percent < 100 else percent
+
+
 def _set(index: int, percent: int) -> None:
     try:
         if MAC:
-            _osascript(f'tell application "Spotify" to set sound volume to {max(0, percent)}')
+            _osascript(f'tell application "Spotify" to set sound volume to {_mac_volume(percent)}')
             return
         _pactl("set-sink-input-volume", str(index), f"{max(0, percent)}%")
     except (OSError, subprocess.TimeoutExpired) as e:
