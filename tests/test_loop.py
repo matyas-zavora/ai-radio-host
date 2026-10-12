@@ -280,3 +280,34 @@ def test_user_pausing_during_transition_restores_volume_fast_and_stays_paused(ho
     play_through(host)
     assert host.player.calls == []                       # we never press play
     assert host.ducker.events[-1] == ("restore", 300)
+
+
+# ---------- the READY / ON AIR timers ----------
+
+def test_break_eta_counts_songs_then_time(host):
+    host.cfg.brk.every_n_tracks = 3
+    play_through(host, end=1_000)
+    assert host.break_eta() == ("songs", 2)              # break after the 3rd song
+    play_through(host, start=1_000)
+    next_track(host, 2)
+    assert host.break_eta() == ("songs", 1)
+    play_through(host)
+    next_track(host, 3)
+    host.player.pos = 20_000
+    host.tick()
+    # pause mode: the host starts talking lead_ms before the end of a 60 s song
+    assert host.break_eta() == ("ms", 60_000 - 20_000 - host.cfg.brk.lead_ms)
+
+
+def test_break_eta_in_duck_mode_uses_half_the_clip(host):
+    host.cfg.brk.transition = "duck"
+    host.counter = 1
+    play_through(host, end=30_000)                       # break prepared, 20 s clip
+    assert host.break_eta() == ("ms", 30_000 - (10_000 + host.cfg.brk.fade_down_ms))
+
+
+def test_break_now_shows_time_not_songs(host):
+    host.cfg.brk.every_n_tracks = 5
+    play_through(host, end=1_000)
+    host.request_break()
+    assert host.break_eta()[0] == "ms"

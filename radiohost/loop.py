@@ -87,6 +87,7 @@ class RadioHost:
         self.history: deque[dict] = deque(maxlen=50)   # generated breaks, newest last
         self._stop = threading.Event()
         self.talking: Track | None = None   # set while a break clip is playing
+        self.talk_ends_at = 0.0             # time.monotonic() when the current clip ends
         self.make_ducker = lambda: Ducker(cfg.brk.duck_level)
         self.force_break = False            # "break after this song", set by the GUI
 
@@ -98,6 +99,30 @@ class RadioHost:
         If it's too late to prepare, it carries over to the next song."""
         self.force_break = True
         log.info("Break requested for the end of this song")
+
+    def break_eta(self) -> tuple[str, object] | None:
+        """For the GUI: ("songs", n) songs to go after this one, ("ms", ms) until the host
+        starts talking, ("skipped", reason), or None when unknown."""
+        st = self.last_state
+        if st is None or st.track is None:
+            return None
+        n = self.cfg.brk.every_n_tracks
+        if not self.force_break and self.counter + 1 < n:
+            return ("songs", n - self.counter - 1)
+        p = self.plan
+        if p is not None and p.cancelled:
+            return ("skipped", p.cancelled)
+        if p is not None and p.done:
+            return None
+        if self._ducking and not (p and p.pause_instead):
+            seconds = p.ready.seconds if p and p.ready else self.cfg.brk.max_seconds
+            lead = seconds * 500 + self.cfg.brk.fade_down_ms
+        else:
+            lead = self.cfg.brk.lead_ms
+        return ("ms", max(0, int(st.remaining_ms - lead)))
+
+    def talk_remaining_ms(self) -> int:
+        return max(0, int((self.talk_ends_at - time.monotonic()) * 1000)) if self.talking else 0
 
     def plan_status(self) -> str:
         p = self.plan
@@ -383,6 +408,7 @@ class RadioHost:
         p.done, self.force_break, self.counter, self.cur_counted = True, False, 0, True
         log.info("ON AIR over the music: introducing %s", brk.next)
         self.clip.start(brk.audio)
+        self.talk_ends_at = time.monotonic() + brk.seconds
         self.talking = brk.next
         ending, coming = state.track, brk.next
         user_paused = False
@@ -435,6 +461,7 @@ class RadioHost:
             return
         log.info("ON AIR: introducing %s", brk.next)
         self.clip.start(brk.audio)
+        self.talk_ends_at = time.monotonic() + brk.seconds
         self.talking = brk.next
 
         user_took_over = False

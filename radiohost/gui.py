@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 import threading
+import time
 from pathlib import Path
 
 import gi
@@ -20,6 +21,7 @@ from .config import (CONFIG_DIR, DEV, LANGUAGES, PROJECT_DIR, Config, load_confi
                      save_config, voice_engine)
 from .spotify_api import NotAuthorized, SpotifyClient  # noqa: E402
 from . import voices as voice_catalog  # noqa: E402
+from .tts import wav_seconds  # noqa: E402
 
 APP_ID = "dev.zavoram.RadioHost"
 log = logging.getLogger("radiohost")
@@ -68,6 +70,7 @@ CSS = """
   50%      { box-shadow: 0 0 38px 12px alpha(#ff2a14, 0.85), inset 0 0 18px alpha(white, 0.30); }
 }
 .onair-caption { margin-top: 10px; }
+.onair-sign .timer { font-size: 20px; letter-spacing: 3px; font-weight: 800; }
 """
 
 
@@ -172,7 +175,13 @@ class Window(Adw.ApplicationWindow):
     def _build_onair(self):
         page = Adw.PreferencesPage()
 
-        self.sign = Gtk.Label(label="OFF", halign=Gtk.Align.CENTER, css_classes=["onair-sign", "off"])
+        self.sign = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, halign=Gtk.Align.CENTER,
+                            css_classes=["onair-sign", "off"])
+        self.sign_text = Gtk.Label(label="OFF")
+        self.sign_timer = Gtk.Label(label="\u00a0", css_classes=["timer"])  # keeps the height
+        self.sign.append(self.sign_text)
+        self.sign.append(self.sign_timer)
+        self.clip_ends_at = 0.0
         self.sign_caption = Gtk.Label(label="", halign=Gtk.Align.CENTER, wrap=True,
                                       justify=Gtk.Justification.CENTER,
                                       css_classes=["dim-label", "onair-caption"])
@@ -241,7 +250,23 @@ class Window(Adw.ApplicationWindow):
             for cls in ("off", "ready", "live"):
                 self.sign.remove_css_class(cls)
             self.sign.add_css_class(state)
-            self.sign.set_label({"off": "OFF", "ready": "READY", "live": "ON AIR"}[state])
+            self.sign_text.set_label({"off": "OFF", "ready": "READY", "live": "ON AIR"}[state])
+        timer = ""
+        if talking is not None:
+            timer = _fmt(host.talk_remaining_ms())
+        elif replaying:
+            timer = _fmt(max(0, int((self.clip_ends_at - time.monotonic()) * 1000)))
+        elif running:
+            eta = host.break_eta()
+            if eta and eta[0] == "songs":
+                timer = f"{eta[1]} song{'s' if eta[1] != 1 else ''}"
+            elif eta and eta[0] == "ms":
+                timer = _fmt(eta[1])
+            elif eta and eta[0] == "skipped":
+                timer = "skipped"
+        timer = timer or "\u00a0"   # no-break space: the sign keeps its height when empty
+        if self.sign_timer.get_label() != timer:
+            self.sign_timer.set_label(timer)
         if talking is not None:
             caption = f"Introducing {talking}"
         elif replaying:
@@ -322,6 +347,7 @@ class Window(Adw.ApplicationWindow):
         clip = self._clip()
         if clip:
             clip.start(path)
+            self.clip_ends_at = time.monotonic() + wav_seconds(path)
 
     # ---------- Log ----------
 
