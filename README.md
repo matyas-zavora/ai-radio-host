@@ -198,7 +198,7 @@ To add it to your app launcher:
 
 | Tab | What it does |
 |---|---|
-| **On Air** | The ON AIR sign, the on/off and dry-run switches, "Break after this song", the current song, the count toward the next break, the next break's status, and recent scripts (▶ replays one). |
+| **On Air** | The studio sign (grey **OFF**, green **READY** while on air and waiting, red pulsing **ON AIR** while the host talks), the on/off and dry-run switches, "Break after this song", the current song, the count toward the next break, the next break's status, and recent scripts (▶ replays one). |
 | **Host** | Everything about the host in one place, applied right away (the host restarts in the background if it's on air, never mid-sentence). **Language**, **name** and **personality**. **Script writer**: one list with Claude Sonnet 5 (recommended), Haiku 4.5 (cheaper), Opus 5, and any local Ollama models. **Voice**: volume with a ▶ test, plus all natural (Google) and local (Piper) voices for the current language with ▶ samples. Tick one to use it. Each language keeps its own voice. |
 | **Settings** | Breaks (how often, how long, when a song counts, pause timing), advanced options (local voice if Google fails, Google monthly limit, Ollama server), account status with a Spotify login button and **Run setup again**, and at the bottom **Reset everything and set up again**. Reset deletes the settings, the Spotify login and the keys in `.env`, then opens the setup wizard. It keeps your Google key file, the monthly Google usage counter and downloaded voices. |
 | **Log** | The live log. |

@@ -32,20 +32,31 @@ CLAUDE_CHOICES = [
 LOCAL_NOTE = "Free and private (Ollama) · invents facts more often, weak in Czech"
 LANG_CODES = list(LANGUAGES)
 
-# The studio "ON AIR" light: dark when idle, glowing red while the host speaks.
+# The studio light: grey OFF, green READY (on air, waiting), red pulsing ON AIR (talking).
 CSS = """
 .onair-sign {
-  background-color: #241010;
-  color: #4d2622;
-  border: 3px solid #3a1a17;
+  min-width: 280px;
   border-radius: 14px;
   padding: 14px 40px;
   font-size: 34px;
   font-weight: 900;
   letter-spacing: 8px;
-  transition: background-color 250ms, color 250ms, border-color 250ms;
+  border: 3px solid;
+  transition: background-color 250ms, color 250ms, border-color 250ms, box-shadow 250ms;
 }
-.onair-sign.lit {
+.onair-sign.off {
+  background-color: #2b2b2b;
+  color: #7c7c7c;
+  border-color: #3d3d3d;
+}
+.onair-sign.ready {
+  background-color: #16843a;
+  color: #effff3;
+  border-color: #3fd36b;
+  text-shadow: 0 0 8px #b9ffd0;
+  box-shadow: 0 0 18px 3px alpha(#2bd45f, 0.40), inset 0 0 12px alpha(white, 0.15);
+}
+.onair-sign.live {
   background-color: #d8150c;
   color: #fff6f0;
   border-color: #ff5a40;
@@ -161,7 +172,7 @@ class Window(Adw.ApplicationWindow):
     def _build_onair(self):
         page = Adw.PreferencesPage()
 
-        self.sign = Gtk.Label(label="ON AIR", halign=Gtk.Align.CENTER, css_classes=["onair-sign"])
+        self.sign = Gtk.Label(label="OFF", halign=Gtk.Align.CENTER, css_classes=["onair-sign", "off"])
         self.sign_caption = Gtk.Label(label="", halign=Gtk.Align.CENTER, wrap=True,
                                       justify=Gtk.Justification.CENTER,
                                       css_classes=["dim-label", "onair-caption"])
@@ -225,8 +236,12 @@ class Window(Adw.ApplicationWindow):
                 self.app.tray.update("on", ("Dry run" if host.dry_run else "On air") + now)
             else:
                 self.app.tray.update("off", "Off air")
-        if lit != self.sign.has_css_class("lit"):
-            (self.sign.add_css_class if lit else self.sign.remove_css_class)("lit")
+        state = "live" if lit else "ready" if running else "off"
+        if not self.sign.has_css_class(state):
+            for cls in ("off", "ready", "live"):
+                self.sign.remove_css_class(cls)
+            self.sign.add_css_class(state)
+            self.sign.set_label({"off": "OFF", "ready": "READY", "live": "ON AIR"}[state])
         if talking is not None:
             caption = f"Introducing {talking}"
         elif replaying:
@@ -234,9 +249,9 @@ class Window(Adw.ApplicationWindow):
         elif running and host.dry_run:
             caption = "Dry run: the host only writes scripts"
         elif running:
-            caption = "Music on. The light comes on when the host talks."
+            caption = "Waiting for the next break. The sign turns red when the host talks."
         else:
-            caption = "Off air"
+            caption = "Turn on air below to start"
         if self.sign_caption.get_label() != caption:
             self.sign_caption.set_label(caption)
 
