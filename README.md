@@ -8,6 +8,10 @@ You play music in Spotify as usual. Every few songs (default 3), an AI host
 introduces the next song in 15–25 seconds of speech, the way a radio DJ does,
 with real facts about the song and the artist. Then the music carries on.
 
+<p align="center">
+  <img src="docs/screenshots/on-air.png" alt="The app while the host is talking: red ON AIR sign with a countdown, the current song and the text of the break" width="560">
+</p>
+
 - **Real facts only.** Facts come from Wikipedia (in your host's language, then
   English) and MusicBrainz. The AI may only use those. When nothing is found,
   the host does a simple intro with no trivia.
@@ -86,6 +90,15 @@ with **Reset everything and set up again** at the bottom of Settings.
 | **Settings** | Breaks (how often, the transition, music volume while talking, length, when a skipped song still counts), advanced options, accounts, **Run setup again**, and **Reset everything**. |
 | **Log** | What the app is doing, including the full text of every break and why a break was skipped. |
 | **Contact** | Version, links to the project page, bug reports, ideas and updates, **Copy system info** for bug reports, and credits. |
+
+<p align="center">
+  <img src="docs/screenshots/ready.png" alt="On Air tab, READY: a countdown to the next break and the recent breaks" width="49%">
+  <img src="docs/screenshots/host-tab.png" alt="Host tab: language, name, personality, script writer and voice" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/voices.png" alt="Host tab with the list of natural voices, each with a sample button" width="49%">
+  <img src="docs/screenshots/settings.png" alt="Settings: breaks, transition, music volume while talking, advanced options and accounts" width="49%">
+</p>
 
 A tray icon shows the state (grey off, white on air, red talking). Left-click
 opens the window; right-click has On air, Break after this song and Quit. If
