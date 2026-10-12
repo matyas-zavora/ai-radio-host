@@ -326,17 +326,15 @@ plainer breaks with the occasional made-up detail.
 
 ## How it works
 
-```
- Spotify app ──MPRIS (D-Bus)──► player.py ◄── Spotify Web API fallback
-                                  │ track, position, pause/play
-                                  ▼
-                              loop.py ── break due ──► spotify_api.py: GET /me/player/queue
-                                  │                              │ next song
-                                  │                              ▼
-                                  │   facts.py (Wikipedia, MusicBrainz) → script.py (Claude / Ollama)
-                                  │                              → tts.py (Google / Piper) → WAV
-                                  ▼
-          pause → clip → resume   or   fade down → clip over the song change → fade up
+```mermaid
+flowchart LR
+  A[Spotify app<br>your playlist] --> B[Watch the song<br>MPRIS · Web API]
+  B --> C[Break due:<br>read the queue]
+  C --> D[Facts from Wikipedia<br>· MusicBrainz]
+  D --> E[Script by<br>Claude · Ollama]
+  E --> F[Voice by<br>Google · Piper]
+  F --> G[On air: pause, or<br>talk over the music]
+  G -. next song .-> A
 ```
 
 - The current song and its position come from the Spotify app over MPRIS, the
