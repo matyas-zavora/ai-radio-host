@@ -2,6 +2,9 @@
 name = "ai-radio-host"
 version = "0.2.0"
 description = "AI radio host talk breaks between your Spotify songs (Linux)"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Matyáš Závora"}]
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=1.0",
@@ -13,6 +16,10 @@ dependencies = [
 [project.optional-dependencies]
 piper = ["piper-tts>=1.3"]
 google = ["google-cloud-texttospeech>=2.16"]
+
+[project.urls]
+Homepage = "https://github.com/matyas-zavora/ai-radio-host"
+Issues = "https://github.com/matyas-zavora/ai-radio-host/issues"
 
 [project.scripts]
 radiohost = "radiohost.__main__:main"

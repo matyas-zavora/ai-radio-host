@@ -16,8 +16,8 @@ from .models import Facts, Track, _norm
 log = logging.getLogger(__name__)
 
 # Wikimedia and MusicBrainz ask for a contact in the User-Agent; set RADIOHOST_CONTACT to yours.
-USER_AGENT = "ai-radio-host/0.1 (personal hobby project; " + os.environ.get(
-    "RADIOHOST_CONTACT", "no contact given") + ")"
+USER_AGENT = "ai-radio-host/0.2 (+https://github.com/matyas-zavora/ai-radio-host; " + os.environ.get(
+    "RADIOHOST_CONTACT", "contact via the project page") + ")"
 
 MUSIC_WORDS = re.compile(
     r"singer|band|rapper|musician|\bdj\b|producer|group|duo|trio|composer|songwriter|"

@@ -8,7 +8,7 @@ min_played_seconds = 30   # a track counts toward N once it has played this long
 lead_ms = 800             # pause this long before the current track ends
 min_seconds = 15          # target length of the spoken break
 max_seconds = 25
-transition = "duck"       # duck = talk over the lowered music (radio style) | pause = stop the music
+transition = "pause"      # pause = stop the music | duck = talk over the lowered music (radio style, see README)
 duck_level = 30           # music volume while the host talks, % of normal
 fade_down_ms = 1500
 fade_up_ms = 3000

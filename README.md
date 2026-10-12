@@ -1,266 +1,246 @@
 # AI Radio Host
 
-A personal radio host for your Spotify playlist. You play music in the
-Spotify desktop app as usual. Every N songs (default 3), the AI host introduces
-the upcoming song in 15–25 seconds of speech, the way a radio DJ does: the music
-fades down at the end of the song, the host starts talking, the next song begins
-quietly under the voice, and the music fades back up when the host is done.
-You can switch to a simpler mode where the music pauses while the host talks.
+A personal radio host for your Spotify playlist, for the Linux desktop.
 
-Needs Spotify Premium (Spotify's developer API requires it) and Linux.
-Alternative Spotify players work too, for example
-[Spotifast](https://github.com/crmne/spotifast), spotifyd, ncspot and Spot.
-The app finds whichever one is running.
+You play music in Spotify as usual. Every few songs (default 3), an AI host
+introduces the next song in 15–25 seconds of speech, the way a radio DJ does,
+with real facts about the song and the artist. Then the music carries on.
 
-- **Real facts only.** Facts come from Wikipedia (in your host language, then
-  English) and MusicBrainz. The AI is told to use only those facts. When none
-  are found, the host does a simple intro with no trivia.
-- **No Spotify data goes to the AI.** Spotify's terms forbid feeding Spotify
-  content, including song metadata, into AI models. The AI only sees the
-  Wikipedia/MusicBrainz facts and writes `{song}` and `{artist}` placeholders;
-  the app fills in the names locally afterwards.
-- **No gap.** The break (facts → script → speech) is prepared while the current
-  song is still playing.
-- **English or Czech.** Set `host.language`, or pass `--lang cs` / `--lang en`.
-- **Claude or a local model.** Scripts come from Claude by default, or from a
-  free local model through Ollama.
-- **Two TTS providers.** Google Cloud TTS (free tier, with a monthly character
-  guard) and Piper (free, local, offline).
+- **Real facts only.** Facts come from Wikipedia (in your host's language, then
+  English) and MusicBrainz. The AI may only use those. When nothing is found,
+  the host does a simple intro with no trivia.
+- **No gap.** Each break is prepared while the current song is still playing.
+- **English or Czech**, with a host name and personality you choose.
+- **Claude or a local model.** Scripts come from Claude (about $0.002 per break)
+  or, for free, from a local model through [Ollama](https://ollama.com).
+- **Natural or offline voices.** Google Cloud TTS (natural, free tier) or Piper
+  (free, offline).
+- **A real app.** GTK4 window with a studio ON AIR sign, a tray icon, a voice
+  picker with samples, and a setup wizard that does the configuration for you.
+- **Two transitions.** By default the music **pauses** while the host talks.
+  Optionally the host can **talk over the music**: it fades down at the end of
+  the song, the next song starts quietly under the voice, and the music fades
+  back up (see [Talking over the music](#talking-over-the-music)).
+
+## Requirements
+
+- Linux with PipeWire or PulseAudio
+- **Spotify Premium** (Spotify only opens its developer API to Premium accounts)
+- The Spotify desktop app, or another Spotify player such as
+  [Spotifast](https://github.com/crmne/spotifast), spotifyd, ncspot or Spot
+- Python 3.11+ with GTK 4.10+ and **libadwaita 1.6+** (Arch, Fedora 41+, Ubuntu 24.10+, Debian 13+):
+  - Arch: `sudo pacman -S python-gobject gtk4 libadwaita`
+  - Fedora: `sudo dnf install python3-gobject gtk4 libadwaita`
+  - Debian/Ubuntu: `sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 python3-venv`
+- For the AI, one of:
+  - an [Anthropic](https://platform.claude.com) API account with a few dollars of credit (best results), or
+  - [Ollama](https://ollama.com) with a local model (free, weaker results)
+
+## Install
+
+```bash
+git clone https://github.com/matyas-zavora/ai-radio-host.git
+cd ai-radio-host
+./install.sh
+```
+
+Or download a tarball from [Releases](https://github.com/matyas-zavora/ai-radio-host/releases),
+unpack it and run `./install.sh`.
+
+Everything stays in your home folder, and no sudo is needed:
+
+- the app goes into `~/.local/share/ai-radio-host`
+- the `radiohost` and `radiohost-gui` commands go into `~/.local/bin`
+- **AI Radio Host** appears in your app launcher
+- your settings live in `~/.config/ai-radio-host/`
+
+**Update:** `git pull && ./install.sh`. Your settings are kept.
+**Uninstall:** `./install.sh --uninstall`. Your settings in `~/.config/ai-radio-host/` are kept.
+
+## First start
+
+Open **AI Radio Host**. A setup wizard walks you through three steps and saves
+everything for you:
+
+1. **Spotify.** Spotify requires every user to register their own small,
+   free "developer app" (a minute in the browser). The wizard opens the right
+   page, gives you the redirect URI to copy, takes the Client ID and logs you in.
+2. **AI.** Paste an Anthropic API key and check it with one click, or switch
+   on "Use a local model (Ollama)".
+3. **Voice and language.** Piper works right away. For Google's natural voices,
+   pick your Google Cloud key file (see [Google Cloud TTS](#google-cloud-tts)).
+
+Then start your playlist in Spotify and switch **On air** on.
+
+You can run the wizard again from **Settings → Accounts**, or wipe everything
+with **Reset everything and set up again** at the bottom of Settings.
+
+## The app
+
+| Tab | What it's for |
+|---|---|
+| **On Air** | The studio sign: grey **OFF**; green **READY** while waiting, with how many songs are left or a countdown to the break; red pulsing **ON AIR** while the host talks, with the time left. Also the on-air and dry-run switches, **Break after this song**, the current song, and the recent scripts (▶ replays one). |
+| **Host** | Everything about the host, applied immediately: language, name, personality; the **script writer** (Claude Sonnet 5, Haiku 4.5, Opus 5, or a local Ollama model); the **voice** (volume with a ▶ test, and all Google and Piper voices for the language with ▶ samples). Each language keeps its own voice. |
+| **Settings** | Breaks (how often, the transition, music volume while talking, length, when a skipped song still counts), advanced options, accounts, **Run setup again**, and **Reset everything**. |
+| **Log** | What the app is doing, including the full text of every break and why a break was skipped. |
+
+A tray icon shows the state (grey off, white on air, red talking). Left-click
+opens the window; right-click has On air, Break after this song and Quit. If
+you close the window while on air, the app asks whether to keep running in the
+background.
+
+## Talking over the music
+
+**Settings → Breaks → Transition → Talk over the music** turns on the radio-style
+transition: the Spotify app's volume fades down (default to 30 %), the host
+starts talking over the end of the song, the next song begins quietly under the
+voice about halfway through, and the music fades back up afterwards.
+
+- It only works when the music plays **on this computer**, because it lowers
+  the player's own audio stream (PulseAudio/PipeWire). With a phone or speaker,
+  or a very short song, that break pauses instead.
+- If you pause, skip or change the volume yourself during a break, the app
+  steps back immediately. If it crashes while the music is lowered, the volume
+  is restored on the next start.
+- **Spotify's rules:** the [Spotify Developer Policy](https://developer.spotify.com/policy)
+  (III.7) says apps must not "overlap any Spotify Content with any other audio
+  content". That's why this mode is off by default. Turning it on is your
+  choice. The default **Pause the music** mode doesn't overlap anything.
+
+## Privacy: what goes where
+
+| Service | What it receives |
+|---|---|
+| **Spotify** (your own developer app) | Read access to what's playing and your queue; pause/play only in fallback cases. |
+| **Wikipedia, MusicBrainz** | Searches for the song title and artist. |
+| **Anthropic** (or your local Ollama) | Only the Wikipedia/MusicBrainz facts and the host's instructions. **No Spotify data**: the AI writes `{song}`/`{artist}` placeholders that the app fills in locally, because Spotify's terms forbid feeding Spotify content (including song metadata) into AI models. |
+| **Google Cloud TTS** (if used) | The text of the break, to turn it into speech. |
+
+Keys are stored in `~/.config/ai-radio-host/.env` (readable only by you). The
+app has no server of its own and collects nothing.
+
+## Google Cloud TTS
+
+Google's Chirp 3 HD voices sound far more natural than Piper. The free tier
+covers 1 million characters a month, and one break is about 350 characters.
+
+1. At <https://console.cloud.google.com>, create a project.
+2. Link a billing account. Google requires one even for the free tier.
+3. **APIs & Services → Library** → enable **Cloud Text-to-Speech API**.
+4. **IAM & Admin → Service Accounts** → create one (no roles needed) →
+   **Keys → Add key → JSON**.
+5. In the app's setup wizard (voice step), choose that JSON file. The wizard
+   copies it to `~/.config/ai-radio-host/` with private permissions.
+
+The app counts its own characters and stops using Google at 900,000 a month
+(Settings → Advanced), switching to Piper. For a hard limit on spending, see
+[`tools/gcp-billing-cap`](tools/gcp-billing-cap/setup.sh): a budget that
+triggers a small Cloud Function to unlink billing from the project at the
+first real charge.
+
+```bash
+tools/gcp-billing-cap/setup.sh PROJECT_ID 0 1   # cut billing above 0; budget of 1 (account currency) for email alerts
+```
+
+## Local AI with Ollama
+
+Install [Ollama](https://ollama.com), run `ollama pull qwen2.5:7b` (or any
+model you like), then pick it under **Host → Script writer** or in the setup
+wizard. No account or key is needed. Small local models stick to the
+facts-only rule less reliably than Claude and are weak in Czech, so expect
+plainer breaks with the occasional made-up detail.
 
 ## How it works
 
 ```
- Spotify app ──MPRIS (D-Bus)──► player.py ◄── Web API fallback
+ Spotify app ──MPRIS (D-Bus)──► player.py ◄── Spotify Web API fallback
                                   │ track, position, pause/play
                                   ▼
-                              loop.py ── every N tracks ──► spotify_api.py: GET /me/player/queue
-                                  │                              │ next track
+                              loop.py ── break due ──► spotify_api.py: GET /me/player/queue
+                                  │                              │ next song
                                   │                              ▼
                                   │   facts.py (Wikipedia, MusicBrainz) → script.py (Claude / Ollama)
                                   │                              → tts.py (Google / Piper) → WAV
                                   ▼
-                 ~0.8 s before the song ends: pause → audio.py plays clip → resume
+          pause → clip → resume   or   fade down → clip over the song change → fade up
 ```
 
-- The **current track and its position** come from the Spotify app over MPRIS,
-  the standard Linux media-player interface. It's local, fast and has no rate
-  limits. If MPRIS doesn't answer, or doesn't report the playback position (the
-  official Spotify app has had this bug), the app uses the Spotify Web API
-  instead. That works with any Spotify Connect device. With Spotifast, its
-  `spotifast` CLI is an extra fallback.
-- The **queue** only exists in the Web API (`GET /me/player/queue`). It is read
-  when a break is due (at the start of the song before the break), again 30 s
-  before the end (so a changed queue can be regenerated), and a final time 8 s
-  before the end.
-- If the track that's about to play doesn't match the prepared break, the break
-  is skipped.
-
-### Edge cases
+- The current song and its position come from the Spotify app over MPRIS, the
+  standard Linux media-player interface: local, fast, no rate limits. If MPRIS
+  doesn't answer or doesn't report the position, the Spotify Web API is used.
+- The queue only exists in the Spotify Web API. It is read when a break is
+  due, again about 30 s before the end (so a changed queue can be regenerated),
+  and a final time just before the host starts. If the song that's about to
+  play doesn't match the prepared break, the break is skipped.
 
 | Situation | What happens |
 |---|---|
-| You skip a song | It counts toward N only if it played ≥ 30 s. A break prepared for the wrong song is dropped. |
-| You change the queue | It's caught by the 30 s recheck and the break is regenerated. If the change comes later, the break is skipped. |
+| You skip a song | It counts toward the break only if it played at least 30 s. A break prepared for the wrong song is dropped. |
+| You change the queue | The recheck catches it and the break is regenerated; if it's too late, the break is skipped. |
 | You pause | Nothing happens. The app never presses play on its own, except to resume after its own break. |
-| You press play during a break | The clip stops and you keep control. |
-| You pause or change the song while the host talks over the music | The clip stops and the music volume comes back right away. |
-| You change the music volume while it's lowered | The app stops touching the volume. |
-| The app crashes while the music is lowered | The volume is restored on the next start. |
-| Music plays on another device (phone, speaker), or the song is very short | That break pauses the music instead of talking over it. |
-| Shuffle | Works if Spotify reports the shuffled order. Check this with `radiohost queue-test`. |
-| Queue empty / next item is a podcast | The break is skipped. The counter stays, so the next song gets the break. |
-| Spotify closed or restarted | The app logs it, waits, and picks up again when it's back. |
-| Spotify 429 / expired token | It backs off by `Retry-After`. Tokens refresh automatically. |
-| Facts, LLM or TTS fail | The break is skipped silently and the music keeps going. If Google TTS fails or hits its budget, Piper is used. |
+| You press play or skip during a break | The host stops and you keep control. |
+| Shuffle | Works: Spotify reports the shuffled order (`radiohost queue-test` checks it). |
+| Queue empty, or a podcast is next | The break is skipped, and the next song gets it instead. |
+| Spotify closed or restarted | The app waits and picks up again. |
+| Rate limits, expired login | It backs off and refreshes the login automatically. |
+| Facts, AI or voice fail | That break is skipped and the music keeps going. If Google fails, Piper takes over. |
 
-### Talking over the music and Spotify's rules
-
-The default transition lowers the Spotify app's volume (through PulseAudio or
-PipeWire, so it only works when the music plays on this computer) and plays the
-host's voice over the end of one song and the start of the next. Spotify's
-[Developer Policy](https://developer.spotify.com/policy) (III.7) says apps must
-not "overlap any Spotify Content with any other audio content". If you want to
-stay strictly within that rule, choose **Settings → Breaks → Transition → Pause
-the music**: the music stops while the host talks, and nothing overlaps.
-
-## Install
-
-Requires Linux, Spotify Premium, the Spotify desktop app (or another Spotify
-player), PipeWire/PulseAudio and, on Arch,
-`sudo pacman -S python-gobject gtk4 libadwaita`. For the AI you need either an
-Anthropic API account with a few dollars of credit (best results) or
-[Ollama](https://ollama.com) with a local model (free).
+## Command line
 
 ```bash
-# the repo is private, so download with the GitHub CLI (gh auth login once)
-gh release download --repo matyas-zavora/ai-radio-host --pattern 'ai-radio-host-*.tar.gz'
-tar xzf ai-radio-host-*.tar.gz && cd ai-radio-host-*/
-./install.sh
+radiohost run                   # the host without the window
+radiohost run --dry-run --every 1   # only print a script for every song: no voice, no pausing
+radiohost once                  # speak one break for the next queued song now (playback untouched)
+radiohost once --lang cs        # the same in Czech
+radiohost queue-test            # check that Spotify's queue predicts the next song (read-only)
+radiohost auth                  # Spotify login without the wizard
+radiohost gui                   # open the window (same as radiohost-gui)
 ```
 
-This installs into `~/.local/share/ai-radio-host`, adds `radiohost` and
-`radiohost-gui` to `~/.local/bin`, adds **AI Radio Host** to your launcher, and
-creates `~/.config/ai-radio-host/config.toml` and `.env` (mode 600). To update,
-run a newer release's `./install.sh`; your settings are kept.
-`./install.sh --uninstall` removes the app but keeps your settings.
-
-Then open **AI Radio Host**. On first launch, a setup wizard walks you through
-the Spotify app and login, the AI (a Claude API key, or a local model in
-Ollama) and the voice, and saves everything for you. You can run it again from Settings → Accounts. The manual
-steps below are only needed if you prefer to edit the files yourself.
-
-An installed copy reads `config.toml` and `.env` from `~/.config/ai-radio-host/`.
-A source checkout (for development) reads them from the project folder.
-
-## Setup
-
-### 1. Install
-
-Requires Python 3.11+, Linux, a running Spotify app, and PipeWire or PulseAudio.
-
-```bash
-cd ~/projects/ai-radio-host
-uv venv .venv && uv pip install -e '.[piper,google]'
-# or: python -m venv .venv && .venv/bin/pip install -e '.[piper,google]'
-cp .env.example .env && chmod 600 .env
-cp config.example.toml config.toml      # optional, all keys have defaults
-```
-
-### 2. Spotify developer app
-
-Spotify dev mode needs a Premium account on the app owner and allows one
-dev-mode Client ID per account.
-
-1. Go to <https://developer.spotify.com/dashboard> → **Create app**.
-2. Name and description: anything.
-3. **Redirect URI:** `http://127.0.0.1:8888/callback`. It must be exactly this.
-   Spotify doesn't accept `localhost`; loopback IPs only.
-4. **Which API/SDKs:** tick **Web API**. Save.
-5. Copy the **Client ID** into `.env` as `SPOTIFY_CLIENT_ID=...`. No client
-   secret is needed, because the app uses Authorization Code with PKCE.
-6. Run `.venv/bin/radiohost auth`. A browser opens, you click **Agree**, and the
-   token is saved to `~/.config/ai-radio-host/spotify_token.json` (mode 600).
-   It refreshes automatically after that.
-
-Scopes requested: `user-read-playback-state`, `user-read-currently-playing`
-(both needed for the queue) and `user-modify-playback-state` (needed only for
-the Web API fallback).
-
-### 3. The AI that writes the script
-
-**Claude (default).** Create a key at <https://platform.claude.com/settings/keys>
-and put it in `.env` as `ANTHROPIC_API_KEY=...`. If the key isn't tied to a
-workspace, also add `ANTHROPIC_WORKSPACE_ID=wrkspc_...`. One break costs about
-$0.002 with `claude-sonnet-5`.
-
-**Local model with [Ollama](https://ollama.com) (free, private).** Install
-Ollama, `ollama pull qwen2.5:7b` (or any model you like), then pick
-**Ollama** in Settings → AI model or in the setup wizard, or set
-`[llm] provider = "ollama"`. No account or key needed. Small local models
-follow the "only use the given facts" rule less reliably, and in a test
-`qwen2.5:7b` invented details and wrote poor Czech. Expect weaker breaks than
-with Claude, especially in Czech. The first break after a while can take
-several seconds longer while the model loads.
-
-### 4. TTS
-
-**Piper (local, free).** Works out of the box. Voices download automatically
-on first use to `~/.local/share/ai-radio-host/piper` (`en_US-ryan-high`,
-`cs_CZ-jirka-medium`, about 180 MB in total). To use Piper, pick a voice under
-**Local voices** on the Host tab, or set it in `[tts.voices]`.
-
-**Google Cloud TTS (default).** The free tier covers 1M characters/month for
-Chirp 3 HD voices and 4M for WaveNet/Standard. One break is about 350
-characters.
-
-1. Go to <https://console.cloud.google.com> → create a project.
-2. Link a billing account. Google requires one even for the free tier.
-3. **APIs & Services → Enable APIs** → enable **Cloud Text-to-Speech API**.
-4. **IAM & Admin → Service Accounts** → create one (no roles needed) →
-   **Keys → Add key → JSON**. Save the file somewhere private, e.g.
-   `~/.config/ai-radio-host/gcp-tts-key.json`, then `chmod 600` it.
-5. In `.env`, add `GOOGLE_APPLICATION_CREDENTIALS=/full/path/to/that.json`.
-6. Optional but recommended: set a budget alert in Billing.
-
-`tts.google.monthly_char_limit` (default 900k) stops Google usage before the
-free tier runs out, and Piper takes over. The counter lives in
-`~/.local/state/ai-radio-host/google_tts_usage.json` and only counts this
-app's usage.
-
-Voices: the same male voice, Charon, is set for both `en-US` and `cs-CZ`. The
-other Chirp 3 HD voices are listed
-[here](https://docs.cloud.google.com/text-to-speech/docs/list-voices-and-types).
-
-### Optional: hard spending cap for Google
-
-Google Cloud budgets only send alerts. `tools/gcp-billing-cap/` adds a real cap: a
-budget whose Pub/Sub notifications trigger a Cloud Function that **unlinks billing
-from the project** once spending reaches the budget, which stops every paid API.
-Needs the `gcloud` CLI logged in as the project owner.
-
-```bash
-tools/gcp-billing-cap/setup.sh PROJECT_ID 0 1     # cut at the first real charge; 1 CZK budget for email alerts
-```
-
-The script is safe to re-run. It ends with a test message that only logs
-"would unlink". Google reports costs a few hours late, so a little can slip past
-the cap. To undo a cut-off, link the billing account to the project again in the
-console.
-
-## App (GUI)
-
-```bash
-.venv/bin/radiohost-gui        # or: .venv/bin/radiohost gui
-```
-
-To add it to your app launcher:
-`sed "s|@VENV@|$PWD/.venv|" data/dev.zavoram.RadioHost.desktop > ~/.local/share/applications/dev.zavoram.RadioHost.desktop`
-
-| Tab | What it does |
-|---|---|
-| **On Air** | The studio sign (grey **OFF**; green **READY** while on air and waiting, with how many songs are left or a countdown to the break; red pulsing **ON AIR** while the host talks, with the time left), the on/off and dry-run switches, "Break after this song", the current song, the count toward the next break, the next break's status, and recent scripts (▶ replays one). |
-| **Host** | Everything about the host in one place, applied right away (the host restarts in the background if it's on air, never mid-sentence). **Language**, **name** and **personality**. **Script writer**: one list with Claude Sonnet 5 (recommended), Haiku 4.5 (cheaper), Opus 5, and any local Ollama models. **Voice**: volume with a ▶ test, plus all natural (Google) and local (Piper) voices for the current language with ▶ samples. Tick one to use it. Each language keeps its own voice. |
-| **Settings** | Breaks (how often, the transition: talk over the music or pause it, music volume while talking, how long, when a song counts), advanced options (local voice if Google fails, Google monthly limit, Ollama server), account status with a Spotify login button and **Run setup again**, and at the bottom **Reset everything and set up again**. Reset deletes the settings, the Spotify login and the keys in `.env`, then opens the setup wizard. It keeps your Google key file, the monthly Google usage counter and downloaded voices. |
-| **Log** | The live log. |
-
-If you close the window while on air, the app asks whether to keep running in
-the background. Opening the app again brings the window back.
-
-## Usage
-
-```bash
-.venv/bin/radiohost queue-test          # first: check queue predictions with shuffle on (read-only)
-.venv/bin/radiohost run --dry-run       # print scripts only: no TTS, no pausing
-.venv/bin/radiohost run --dry-run --every 1   # a script for every track, for fast testing
-.venv/bin/radiohost once                # speak one break for the next queued song now (playback untouched)
-.venv/bin/radiohost once --lang cs      # same in Czech
-.venv/bin/radiohost run                 # the real thing
-.venv/bin/radiohost run --lang cs -v    # Czech host, debug logging (shows the facts used)
-```
-
-`once` plays the clip over your music without pausing it; it's only for
-testing voices.
-
-The log shows the current track, the count toward the next break, the facts
-count, the full script text, and why any break was skipped.
+Add `-v` for debug logging, which shows the facts used.
 
 ## Configuration
 
-`config.toml` (gitignored) holds the settings and `.env` (gitignored) holds the
-secrets. See `config.example.toml` for every option: break frequency, lead
-time, length, language, personality, model, TTS provider/voices/budget, player
-backend order and audio command.
+Everything in the app is stored in `~/.config/ai-radio-host/config.toml`, and
+keys in `~/.config/ai-radio-host/.env`. See [`config.example.toml`](config.example.toml)
+and [`.env.example`](.env.example) for every option, if you prefer editing files.
 
-## Layout
+## Known limitations
+
+- Linux only (GTK4, MPRIS, PulseAudio/PipeWire).
+- Spotify's developer "development mode" allows up to 5 users per developer
+  app, which is why every user registers their own (the wizard guides you).
+- The official Spotify desktop app hasn't been tested much yet. Spotifast is
+  the most tested player.
+- If you change the queue in the last few seconds before a break, the host can
+  introduce the wrong song.
+
+## Development
+
+```bash
+git clone https://github.com/matyas-zavora/ai-radio-host.git && cd ai-radio-host
+uv venv --system-site-packages -p /usr/bin/python3 .venv    # system Python, for GTK
+uv pip install --python .venv/bin/python -e '.[piper,google]' pytest
+.venv/bin/python -m pytest
+.venv/bin/radiohost-gui
+```
+
+A source checkout reads `config.toml` and `.env` from the project folder
+instead of `~/.config/ai-radio-host/`.
 
 | Module | Role |
 |---|---|
-| `radiohost/player.py` | `PlayerControl` interface: MPRIS (any Spotify app), Spotifast CLI, Web API, plus a fallback chain |
-| `radiohost/spotify_api.py` | PKCE login, token refresh, 429 back-off, queue, playback |
-| `radiohost/facts.py` | Wikipedia + MusicBrainz lookups |
-| `radiohost/script.py` | The host prompt; Claude or Ollama; validation |
-| `radiohost/setup_wizard.py` | First-run setup wizard |
-| `radiohost/tts.py` | `TTSProvider`: Google, Piper, fallback, monthly budget |
-| `radiohost/audio.py` | Clip playback (pw-play / paplay / mpv) |
-| `radiohost/loop.py` | State machine: counting, planning, queue checks, the break |
-| `radiohost/config.py` | config.toml + .env loading |
+| `radiohost/player.py` | Player control: MPRIS (any Spotify app), Spotifast CLI, Spotify Web API, with fallback |
+| `radiohost/spotify_api.py` | PKCE login, token refresh, rate-limit back-off, queue |
+| `radiohost/loop.py` | Counting songs, planning breaks, queue checks, pause or talk-over |
+| `radiohost/facts.py` | Wikipedia and MusicBrainz lookups |
+| `radiohost/script.py` | The host prompt (Claude or Ollama), placeholders, validation |
+| `radiohost/tts.py`, `voices.py` | Google and Piper voices, monthly budget, samples |
+| `radiohost/ducking.py` | Lowering and restoring the player's volume |
+| `radiohost/audio.py` | Playing the clip |
+| `radiohost/gui.py`, `setup_wizard.py`, `tray.py` | The app, the wizard, the tray icon |
+| `radiohost/config.py` | Settings and keys |
+
+## License
+
+[MIT](LICENSE). Not affiliated with Spotify, Anthropic or Google.

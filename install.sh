@@ -27,7 +27,12 @@ fi
 
 PY=/usr/bin/python3
 if ! "$PY" -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")' 2>/dev/null; then
-  echo "Missing GTK4/libadwaita for Python. On Arch: sudo pacman -S python-gobject gtk4 libadwaita"
+  echo "Missing GTK4/libadwaita for Python. See the README (Requirements) for your distribution."
+  exit 1
+fi
+ADW="$("$PY" -c 'import gi; gi.require_version("Adw", "1"); from gi.repository import Adw; print(Adw.get_minor_version())')"
+if [ "$ADW" -lt 6 ]; then
+  echo "libadwaita 1.$ADW is too old; AI Radio Host needs 1.6 or newer (e.g. Ubuntu 24.10+, Debian 13+)."
   exit 1
 fi
 command -v pw-play >/dev/null || command -v paplay >/dev/null || command -v mpv >/dev/null \
@@ -62,5 +67,5 @@ fi
 
 echo
 echo "Installed. Open 'AI Radio Host' from your launcher (or run: radiohost-gui)."
-echo "On first launch, a setup wizard walks you through Spotify, Claude and the voice."
+echo "On first launch, a setup wizard walks you through Spotify, the AI and the voice."
 case ":$PATH:" in *":$BIN_DIR:"*) ;; *) echo "Note: $BIN_DIR is not in your PATH.";; esac
