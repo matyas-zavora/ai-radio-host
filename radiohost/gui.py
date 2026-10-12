@@ -14,7 +14,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
 from .audio import AudioError, ClipPlayer  # noqa: E402
 from .config import (CONFIG_DIR, DEV, LANGUAGES, PROJECT_DIR, Config, load_config,  # noqa: E402
@@ -31,6 +31,29 @@ CLAUDE_CHOICES = [
     ("anthropic:claude-haiku-4-5", "Claude Haiku 4.5", "Cheaper · a bit plainer"),
     ("anthropic:claude-opus-5", "Claude Opus 5", "Most capable · about 2.5× the cost"),
 ]
+REPO = "https://github.com/matyas-zavora/ai-radio-host"
+CONTACT_LINKS = [
+    ("Project page", "Source code, documentation and news", REPO),
+    ("Report a bug", "Something doesn't work? Tell me on GitHub", f"{REPO}/issues/new?template=bug_report.yml"),
+    ("Suggest an idea", "A feature you'd like to see", f"{REPO}/issues/new?template=feature_request.yml"),
+    ("Check for updates", "Latest releases and what's new", f"{REPO}/releases"),
+]
+CREDITS = [
+    ("Facts", "Wikipedia and MusicBrainz"),
+    ("Voices", "Google Cloud Text-to-Speech and Piper"),
+    ("Scripts", "Claude by Anthropic, or Ollama"),
+    ("Music", "Spotify. Not affiliated with or endorsed by Spotify"),
+]
+
+
+def app_version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("ai-radio-host")
+    except Exception:  # noqa: BLE001 - running from an unusual checkout
+        return "dev"
+
+
 LOCAL_NOTE = "Free and private (Ollama) · invents facts more often, weak in Czech"
 LANG_CODES = list(LANGUAGES)
 
@@ -128,6 +151,7 @@ class Window(Adw.ApplicationWindow):
         stack.add_titled_with_icon(self._build_host(), "host", "Host", "audio-input-microphone-symbolic")
         stack.add_titled_with_icon(self._build_settings(), "settings", "Settings", "emblem-system-symbolic")
         stack.add_titled_with_icon(self._build_log(), "log", "Log", "utilities-terminal-symbolic")
+        stack.add_titled_with_icon(self._build_contact(), "contact", "Contact", "help-about-symbolic")
         self.toasts.set_child(stack)
 
         header = Adw.HeaderBar()
@@ -348,6 +372,64 @@ class Window(Adw.ApplicationWindow):
         if clip:
             clip.start(path)
             self.clip_ends_at = time.monotonic() + wav_seconds(path)
+
+    # ---------- Contact ----------
+
+    def _build_contact(self):
+        page = Adw.PreferencesPage()
+        header = Adw.StatusPage(icon_name="dev.zavoram.RadioHost", title="AI Radio Host",
+                                description=f"Version {app_version()} · by Matyáš Závora\n"
+                                            "Free and open source (MIT license)")
+        g = Adw.PreferencesGroup()
+        g.add(header)
+        page.add(g)
+
+        g = Adw.PreferencesGroup(title="Get in touch",
+                                 description="Bug reports and ideas go through GitHub.")
+        for title, subtitle, url in CONTACT_LINKS:
+            row = Adw.ActionRow(title=title, subtitle=subtitle, activatable=True)
+            row.add_suffix(Gtk.Image(icon_name="adw-external-link-symbolic"))
+            row.connect("activated", lambda r, u=url: Gtk.UriLauncher.new(u).launch(self, None, None, None))
+            g.add(row)
+        info = Adw.ActionRow(title="Copy system info",
+                             subtitle="App, Python, GTK and player versions, to paste into a bug report",
+                             activatable=True)
+        info.add_suffix(Gtk.Image(icon_name="edit-copy-symbolic"))
+        info.connect("activated", lambda *_: self._copy_system_info())
+        g.add(info)
+        page.add(g)
+
+        g = Adw.PreferencesGroup(title="Credits")
+        for title, subtitle in CREDITS:
+            g.add(Adw.ActionRow(title=title, subtitle=subtitle))
+        page.add(g)
+        return page
+
+    def _copy_system_info(self) -> None:
+        import platform
+        distro = "unknown"
+        try:
+            for line in Path("/etc/os-release").read_text().splitlines():
+                if line.startswith("PRETTY_NAME="):
+                    distro = line.split("=", 1)[1].strip('"')
+        except OSError:
+            pass
+        cfg = load_config()
+        st = self.app.host.last_state if self.app.host else None
+        lines = [
+            f"AI Radio Host {app_version()}",
+            f"Distribution: {distro}",
+            f"Python {platform.python_version()}, GTK {Gtk.get_major_version()}.{Gtk.get_minor_version()}, "
+            f"libadwaita {Adw.get_major_version()}.{Adw.get_minor_version()}",
+            f"Player backend: {st.backend if st else 'not on air'} (setting: {cfg.player.mpris_name})",
+            f"Transition: {cfg.brk.transition}, script writer: "
+            + (cfg.llm.model if cfg.llm.provider == "anthropic" else f"Ollama {cfg.llm.ollama_model}"),
+            f"Voices: {', '.join(f'{lang}={cfg.tts.voice_for(lang)}' for lang in LANGUAGES)}",
+        ]
+        text = "\n".join(lines)   # no keys, no paths, no account data
+        Gdk.Display.get_default().get_clipboard().set_content(
+            Gdk.ContentProvider.new_for_value(GObject.Value(str, text)))
+        self.toast("System info copied")
 
     # ---------- Log ----------
 

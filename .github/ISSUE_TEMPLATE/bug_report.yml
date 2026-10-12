@@ -1,0 +1,32 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can it be reproduced?
+      placeholder: |
+        1. Turn on air with ...
+        2. ...
+  - type: textarea
+    id: system
+    attributes:
+      label: System info
+      description: In the app, Contact → Copy system info, then paste it here.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Relevant lines from the Log tab, if any. Remove anything private.
+      render: text

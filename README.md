@@ -83,6 +83,7 @@ with **Reset everything and set up again** at the bottom of Settings.
 | **Host** | Everything about the host, applied immediately: language, name, personality; the **script writer** (Claude Sonnet 5, Haiku 4.5, Opus 5, or a local Ollama model); the **voice** (volume with a ▶ test, and all Google and Piper voices for the language with ▶ samples). Each language keeps its own voice. |
 | **Settings** | Breaks (how often, the transition, music volume while talking, length, when a skipped song still counts), advanced options, accounts, **Run setup again**, and **Reset everything**. |
 | **Log** | What the app is doing, including the full text of every break and why a break was skipped. |
+| **Contact** | Version, links to the project page, bug reports, ideas and updates, **Copy system info** for bug reports, and credits. |
 
 A tray icon shows the state (grey off, white on air, red talking). Left-click
 opens the window; right-click has On air, Break after this song and Quit. If
@@ -240,6 +241,11 @@ instead of `~/.config/ai-radio-host/`.
 | `radiohost/audio.py` | Playing the clip |
 | `radiohost/gui.py`, `setup_wizard.py`, `tray.py` | The app, the wizard, the tray icon |
 | `radiohost/config.py` | Settings and keys |
+
+## Feedback
+
+Found a bug or have an idea? [Open an issue](https://github.com/matyas-zavora/ai-radio-host/issues/new/choose).
+For bugs, paste the output of **Contact → Copy system info** from the app.
 
 ## License
 
