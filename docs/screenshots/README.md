@@ -8,6 +8,7 @@ Images used in the main README. Keep these file names when updating them:
 | `ready.png` | On Air tab, READY with a countdown and recent breaks |
 | `host-tab.png` | Host tab: language, name, personality, script writer, voice |
 | `voices.png` | Host tab with the voice list open |
+| `setup-spotify.png` | Setup wizard, Spotify step (Client ID field empty) |
 | `settings.png` | Settings tab (the `.env` path under Accounts is blurred) |
 
 Before adding a screenshot, check it shows no keys, Client ID, workspace ID or home-folder paths.

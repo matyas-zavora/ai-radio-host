@@ -76,6 +76,10 @@ everything for you:
 3. **Voice and language.** Piper works right away. For Google's natural voices,
    pick your Google Cloud key file (see [Google Cloud TTS](#google-cloud-tts)).
 
+<p align="center">
+  <img src="docs/screenshots/setup-spotify.png" alt="The setup wizard's Spotify step: dashboard link, redirect URI to copy, Client ID field and login button" width="480">
+</p>
+
 Then start your playlist in Spotify and switch **On air** on.
 
 You can run the wizard again from **Settings → Accounts**, or wipe everything
