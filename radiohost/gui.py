@@ -241,6 +241,7 @@ class Window(Adw.ApplicationWindow):
         self._volume_save = GLib.timeout_add(600, save)
 
     def _on_lang_changed(self, row, _pspec):
+        self.cfg = load_config()  # don't write back a stale copy
         self.cfg.host.language = row.items[row.get_selected()]
         save_config(self.cfg)
         if self.app.running:
