@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 import anthropic
+import httpx
 
 from .config import LANGUAGES, BreakConfig, HostConfig, LLMConfig
 from .models import Facts, Track
@@ -46,14 +48,23 @@ class ScriptError(Exception):
     pass
 
 
+THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S)  # reasoning models (qwen3, deepseek-r1)
+
+
 class ScriptWriter:
     def __init__(self, llm: LLMConfig, host: HostConfig, brk: BreakConfig):
-        # Keys not scoped to a workspace need the workspace ID on every request.
-        workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID")
-        self.client = anthropic.Anthropic(
-            timeout=30.0, max_retries=2,
-            default_headers={"anthropic-workspace-id": workspace} if workspace else None)
         self.llm = llm
+        if llm.provider == "anthropic":
+            # Keys not scoped to a workspace need the workspace ID on every request.
+            workspace = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+            self.client = anthropic.Anthropic(
+                timeout=30.0, max_retries=2,
+                default_headers={"anthropic-workspace-id": workspace} if workspace else None)
+        elif llm.provider == "ollama":
+            # Local models can be slow on CPU; there's a whole song to wait.
+            self.http = httpx.Client(base_url=llm.ollama_url.rstrip("/"), timeout=120.0)
+        else:
+            raise ValueError(f"unknown llm.provider: {llm.provider}")
         self.lang = host.language
         rate = WORDS_PER_SECOND.get(self.lang, 2.4)
         self.max_words = int(brk.max_seconds * rate)
@@ -81,14 +92,25 @@ class ScriptWriter:
             parts.append(f"SONG THAT JUST FINISHED\n{previous.artist} – {previous.title}")
         parts.append("FACTS\n" + ("\n".join(f"- {f}" for f in facts.items) if facts else "(none)"))
         parts.append("Write the talk break now.")
+        user = "\n\n".join(parts)
 
+        text = self._claude(user) if self.llm.provider == "anthropic" else self._ollama(user)
+        text = text.strip('"“”„').strip()
+        if not text:
+            raise ScriptError("LLM returned no text")
+        words = len(text.split())
+        if words > self.max_words * 1.4:
+            raise ScriptError(f"script too long ({words} words, max {self.max_words})")
+        return text
+
+    def _claude(self, user: str) -> str:
         try:
             response = self.client.messages.create(
                 model=self.llm.model,
                 max_tokens=4000,
                 system=self.system,
                 output_config={"effort": self.llm.effort},
-                messages=[{"role": "user", "content": "\n\n".join(parts)}],
+                messages=[{"role": "user", "content": user}],
             )
         except anthropic.APIConnectionError as e:
             raise ScriptError(f"Anthropic API unreachable: {e}") from e
@@ -104,11 +126,35 @@ class ScriptWriter:
         log.info("LLM usage: %d in / %d out tokens%s", u.input_tokens, u.output_tokens, cost)
         if response.stop_reason != "end_turn":
             raise ScriptError(f"LLM stopped with {response.stop_reason}")
-        text = " ".join(b.text for b in response.content if b.type == "text").strip()
-        text = text.strip('"“”„').strip()
-        if not text:
-            raise ScriptError("LLM returned no text")
-        words = len(text.split())
-        if words > self.max_words * 1.4:
-            raise ScriptError(f"script too long ({words} words, max {self.max_words})")
-        return text
+        return " ".join(b.text for b in response.content if b.type == "text").strip()
+
+    def _ollama(self, user: str) -> str:
+        try:
+            r = self.http.post("/api/chat", json={
+                "model": self.llm.ollama_model,
+                "stream": False,
+                "messages": [{"role": "system", "content": self.system},
+                             {"role": "user", "content": user}],
+                "options": {"temperature": 0.7, "num_predict": 400},
+            })
+        except httpx.HTTPError as e:
+            raise ScriptError(f"Ollama unreachable at {self.llm.ollama_url}: {e}") from e
+        if r.status_code == 404:
+            raise ScriptError(f"Ollama has no model '{self.llm.ollama_model}' "
+                              f"(run: ollama pull {self.llm.ollama_model})")
+        if r.status_code != 200:
+            raise ScriptError(f"Ollama error {r.status_code}: {r.text[:200]}")
+        data = r.json()
+        log.info("LLM usage (Ollama %s): %s in / %s out tokens, %.1fs", self.llm.ollama_model,
+                 data.get("prompt_eval_count", "?"), data.get("eval_count", "?"),
+                 data.get("total_duration", 0) / 1e9)
+        if data.get("done_reason") == "length":
+            raise ScriptError("local model ran out of tokens")
+        return THINK_BLOCK.sub("", data.get("message", {}).get("content", "")).strip()
+
+
+def ollama_models(url: str) -> list[str]:
+    """Models installed in an Ollama server (raises httpx.HTTPError if unreachable)."""
+    r = httpx.get(url.rstrip("/") + "/api/tags", timeout=5)
+    r.raise_for_status()
+    return sorted(m["name"] for m in r.json().get("models", []))

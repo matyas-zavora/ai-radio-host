@@ -16,6 +16,8 @@ The app finds whichever one is running.
 - **No gap.** The break (facts → script → speech) is prepared while the current
   song is still playing.
 - **English or Czech.** Set `host.language`, or pass `--lang cs` / `--lang en`.
+- **Claude or a local model.** Scripts come from Claude by default, or from a
+  free local model through Ollama.
 - **Two TTS providers.** Google Cloud TTS (free tier, with a monthly character
   guard) and Piper (free, local, offline).
 
@@ -122,11 +124,21 @@ Scopes requested: `user-read-playback-state`, `user-read-currently-playing`
 (both needed for the queue) and `user-modify-playback-state` (needed only for
 the Web API fallback).
 
-### 3. Anthropic API key
+### 3. The AI that writes the script
 
-Create a key at <https://console.anthropic.com> and put it in `.env` as
-`ANTHROPIC_API_KEY=...`. One break is a few hundred tokens with
-`claude-sonnet-5`.
+**Claude (default).** Create a key at <https://platform.claude.com/settings/keys>
+and put it in `.env` as `ANTHROPIC_API_KEY=...`. If the key isn't tied to a
+workspace, also add `ANTHROPIC_WORKSPACE_ID=wrkspc_...`. One break costs about
+$0.002 with `claude-sonnet-5`.
+
+**Local model with [Ollama](https://ollama.com) (free, private).** Install
+Ollama, `ollama pull qwen2.5:7b` (or any model you like), then pick
+**Ollama** in Settings → AI model or in the setup wizard, or set
+`[llm] provider = "ollama"`. No account or key needed. Small local models
+follow the "only use the given facts" rule less reliably, and in a test
+`qwen2.5:7b` invented details and wrote poor Czech. Expect weaker breaks than
+with Claude, especially in Czech. The first break after a while can take
+several seconds longer while the model loads.
 
 ### 4. TTS
 

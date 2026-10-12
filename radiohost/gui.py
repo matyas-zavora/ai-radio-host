@@ -24,6 +24,7 @@ APP_ID = "dev.zavoram.RadioHost"
 log = logging.getLogger("radiohost")
 
 MODELS = ["claude-sonnet-5", "claude-haiku-4-5", "claude-opus-5"]
+LLM_PROVIDERS = ["anthropic", "ollama"]
 EFFORTS = ["low", "medium", "high"]
 PROVIDERS = ["google", "piper"]
 FALLBACKS = ["", "piper", "google"]
@@ -418,11 +419,22 @@ class Window(Adw.ApplicationWindow):
         g.add(self.s_personality)
         page.add(g)
 
-        g = Adw.PreferencesGroup(title="AI model", description="Sonnet 5 costs about $0.002 per break.")
-        self.s_model = _combo("Model", MODELS, c.llm.model)
+        g = Adw.PreferencesGroup(title="AI model")
+        self.s_llm = _combo("Provider", LLM_PROVIDERS, c.llm.provider,
+                            ["Claude (Anthropic API)", "Ollama (local, free)"])
+        self.s_model = _combo("Claude model", MODELS, c.llm.model)
         self.s_effort = _combo("Effort", EFFORTS, c.llm.effort)
-        g.add(self.s_model)
-        g.add(self.s_effort)
+        self.s_ollama_url = Adw.EntryRow(title="Ollama server", text=c.llm.ollama_url)
+        self.s_ollama_model = _combo("Ollama model", [c.llm.ollama_model], c.llm.ollama_model)
+        refresh = Gtk.Button(icon_name="view-refresh-symbolic", valign=Gtk.Align.CENTER,
+                             css_classes=["flat"], tooltip_text="Ask Ollama which models it has")
+        refresh.connect("clicked", lambda *_: self._load_ollama_models())
+        self.s_ollama_model.add_suffix(refresh)
+        for w in (self.s_llm, self.s_model, self.s_effort, self.s_ollama_url, self.s_ollama_model):
+            g.add(w)
+        self.s_llm_group = g
+        self.s_llm.connect("notify::selected", lambda *_: self._llm_rows())
+        self._llm_rows()
         page.add(g)
 
         g = Adw.PreferencesGroup(title="Speech", description="Pick voices on the Voices tab.")
@@ -460,6 +472,45 @@ class Window(Adw.ApplicationWindow):
         page.add(g)
         return page
 
+    def _llm_rows(self) -> None:
+        local = self.s_llm.items[self.s_llm.get_selected()] == "ollama"
+        for row in (self.s_model, self.s_effort):
+            row.set_visible(not local)
+        for row in (self.s_ollama_url, self.s_ollama_model):
+            row.set_visible(local)
+        self.s_llm_group.set_description(
+            "Free and private, but small models invent facts more often and are weak in Czech."
+            if local else "Sonnet 5 costs about $0.002 per break.")
+        if local and len(self.s_ollama_model.items) <= 1:
+            self._load_ollama_models()
+
+    def _load_ollama_models(self) -> None:
+        from .script import ollama_models
+        url = self.s_ollama_url.get_text().strip()
+        current = self.s_ollama_model.items[self.s_ollama_model.get_selected()]
+
+        def work():
+            try:
+                found, err = ollama_models(url), None
+            except Exception as e:  # noqa: BLE001
+                found, err = [], e
+
+            def done():
+                if err:
+                    self.s_ollama_model.set_subtitle(f"Can't reach Ollama at {url}")
+                    return False
+                if not found:
+                    self.s_ollama_model.set_subtitle("No models yet: run  ollama pull qwen2.5:7b")
+                    return False
+                items = found if current in found else found + [current]
+                self.s_ollama_model.items = items
+                self.s_ollama_model.set_model(Gtk.StringList.new(items))
+                self.s_ollama_model.set_selected(items.index(current))
+                self.s_ollama_model.set_subtitle(f"{len(found)} model(s) installed")
+                return False
+            GLib.idle_add(done)
+        threading.Thread(target=work, daemon=True).start()
+
     def _refresh_accounts(self) -> None:
         try:
             ok = SpotifyClient(self.cfg.spotify_client_id, self.cfg.spotify_redirect_uri).authorized
@@ -468,10 +519,14 @@ class Window(Adw.ApplicationWindow):
         except NotAuthorized as e:
             self.acc_spotify.set_subtitle(str(e))
             self.acc_login.set_sensitive(False)
-        key = os.environ.get("ANTHROPIC_API_KEY")
-        self.acc_anthropic.set_subtitle(
-            ("API key set" + (" (with workspace ID)" if os.environ.get("ANTHROPIC_WORKSPACE_ID") else ""))
-            if key else "ANTHROPIC_API_KEY missing in .env")
+        if load_config().llm.provider == "ollama":
+            anthropic_status = "Not needed: using a local model (Ollama)"
+        elif os.environ.get("ANTHROPIC_API_KEY"):
+            anthropic_status = "API key set" + (
+                " (with workspace ID)" if os.environ.get("ANTHROPIC_WORKSPACE_ID") else "")
+        else:
+            anthropic_status = "ANTHROPIC_API_KEY missing in .env"
+        self.acc_anthropic.set_subtitle(anthropic_status)
         creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
         if creds and Path(creds).exists():
             self.acc_google.set_subtitle("Credentials file found")
@@ -502,8 +557,11 @@ class Window(Adw.ApplicationWindow):
         c.brk.lead_ms = int(self.s_lead.get_value())
         c.host.name = self.s_name.get_text().strip()
         c.host.personality = self.s_personality.get_text().strip() or c.host.personality
+        c.llm.provider = self.s_llm.items[self.s_llm.get_selected()]
         c.llm.model = self.s_model.items[self.s_model.get_selected()]
         c.llm.effort = self.s_effort.items[self.s_effort.get_selected()]
+        c.llm.ollama_url = self.s_ollama_url.get_text().strip() or c.llm.ollama_url
+        c.llm.ollama_model = self.s_ollama_model.items[self.s_ollama_model.get_selected()]
         c.tts.provider = self.s_provider.items[self.s_provider.get_selected()]
         c.tts.fallback = self.s_fallback.items[self.s_fallback.get_selected()]
         c.tts.google_monthly_char_limit = int(self.s_budget.get_value())

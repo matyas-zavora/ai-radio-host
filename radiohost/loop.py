@@ -147,7 +147,9 @@ class RadioHost:
         n = self.cfg.brk.every_n_tracks
         log.info("Radio host on air%s: break every %d track%s, language %s, model %s",
                  " (DRY RUN)" if self.dry_run else "", n, "s" if n != 1 else "",
-                 self.cfg.host.language, self.cfg.llm.model)
+                 self.cfg.host.language,
+                 self.cfg.llm.model if self.cfg.llm.provider == "anthropic"
+                 else f"{self.cfg.llm.ollama_model} (Ollama)")
         try:
             while not self._stop.is_set():
                 self.tick()

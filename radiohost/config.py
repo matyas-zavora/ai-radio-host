@@ -42,8 +42,11 @@ class HostConfig:
 
 @dataclass
 class LLMConfig:
+    provider: str = "anthropic"    # anthropic | ollama
     model: str = "claude-sonnet-5"
     effort: str = "medium"
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen2.5:7b"
 
 
 @dataclass

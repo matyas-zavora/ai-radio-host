@@ -36,7 +36,9 @@ def _spotify(cfg) -> SpotifyClient:
     return client
 
 
-def _require_anthropic() -> None:
+def _require_anthropic(cfg=None) -> None:
+    if cfg is not None and cfg.llm.provider != "anthropic":
+        return
     profile_dir = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "anthropic"
     if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
             or profile_dir.exists()):
@@ -48,7 +50,7 @@ def build_host(cfg, dry_run: bool):
     from .loop import RadioHost
     from .tts import build_tts
 
-    _require_anthropic()
+    _require_anthropic(cfg)
     spotify = _spotify(cfg)
     player = build_player(cfg.player.backends, cfg.player.mpris_name, spotify)
     tts = None if dry_run else build_tts(cfg.tts, cfg.host.language)
@@ -71,7 +73,7 @@ def cmd_once(cfg, args) -> int:
     from .loop import RadioHost
     from .tts import build_tts
 
-    _require_anthropic()
+    _require_anthropic(cfg)
     spotify = _spotify(cfg)
     current, queue = spotify.queue()
     if not queue:

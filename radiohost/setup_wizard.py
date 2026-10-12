@@ -21,7 +21,9 @@ CLIENT_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 def setup_needed() -> bool:
     cfg = load_config()
-    if not cfg.spotify_client_id or not os.environ.get("ANTHROPIC_API_KEY"):
+    if not cfg.spotify_client_id:
+        return True
+    if cfg.llm.provider == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
         return True
     try:
         return not SpotifyClient(cfg.spotify_client_id, cfg.spotify_redirect_uri).authorized
@@ -106,7 +108,7 @@ class SetupWizard(Adw.Dialog):
                         "playlist.\n\nSetup takes about 5 minutes. You'll need:\n"
                         "• Spotify Premium\n"
                         "• an Anthropic account with a few dollars of credit "
-                        "(one break costs about $0.002)")
+                        "(one break costs about $0.002), or a local model in Ollama")
         page, _ = self._page("Welcome", status, "Start")
         return page
 
@@ -223,12 +225,84 @@ class SetupWizard(Adw.Dialog):
         _set_status(self.cl_row, self.cl_icon, None, "Makes a free test request")
         g.add(self.cl_row)
         pp.add(g)
-        page, self.cl_next = self._page("Claude (2/3)", pp)
-        saved = os.environ.get("ANTHROPIC_API_KEY", "").startswith("sk-ant-")
-        self.cl_next.set_sensitive(saved)
-        if saved:
-            _set_status(self.cl_row, self.cl_icon, None, "Key saved earlier. Check it again if you like.")
+        self.claude_group = g
+
+        g = Adw.PreferencesGroup()
+        self.use_local = Adw.SwitchRow(
+            title="Use a local model (Ollama) instead",
+            subtitle="Free and private, no account needed. Small models invent facts more "
+                     "often and are weak in Czech.")
+        g.add(self.use_local)
+        pp.add(g)
+
+        g = Adw.PreferencesGroup(
+            title="Ollama", description="Install from ollama.com, then e.g.  ollama pull qwen2.5:7b")
+        self.ol_url = Adw.EntryRow(title="Server", text=self.cfg.llm.ollama_url)
+        self.ol_url.connect("changed", lambda *_: self.cl_next.set_sensitive(False))
+        self.ol_model = Adw.ComboRow(title="Model", model=Gtk.StringList.new([self.cfg.llm.ollama_model]))
+        self.ol_model.names = [self.cfg.llm.ollama_model]
+        self.ol_row, self.ol_icon = _status_row("Check")
+        ol_check = Gtk.Button(label="Find models", valign=Gtk.Align.CENTER)
+        ol_check.connect("clicked", lambda *_: self._ollama_check())
+        self.ol_row.add_suffix(ol_check)
+        _set_status(self.ol_row, self.ol_icon, None, "Asks Ollama which models are installed")
+        for w in (self.ol_url, self.ol_model, self.ol_row):
+            g.add(w)
+        pp.add(g)
+        self.ollama_group = g
+
+        page, self.cl_next = self._page("AI (2/3)", pp, None, self._ai_next)
+        self.use_local.connect("notify::active", lambda *_: self._ai_mode())
+        self.use_local.set_active(self.cfg.llm.provider == "ollama")
+        self._ai_mode()
         return page
+
+    def _ai_mode(self) -> None:
+        local = self.use_local.get_active()
+        self.claude_group.set_visible(not local)
+        self.ollama_group.set_visible(local)
+        if local:
+            self.cl_next.set_sensitive(False)
+            self._ollama_check()
+        else:
+            saved = os.environ.get("ANTHROPIC_API_KEY", "").startswith("sk-ant-")
+            self.cl_next.set_sensitive(saved)
+            if saved:
+                _set_status(self.cl_row, self.cl_icon, None,
+                            "Key saved earlier. Check it again if you like.")
+
+    def _ollama_check(self) -> None:
+        from .script import ollama_models
+        url = self.ol_url.get_text().strip()
+        _set_status(self.ol_row, self.ol_icon, None, "Asking Ollama…")
+
+        def done(models, err):
+            if err:
+                _set_status(self.ol_row, self.ol_icon, False,
+                            f"Can't reach Ollama at {url}. Is it running?")
+                return
+            if not models:
+                _set_status(self.ol_row, self.ol_icon, False,
+                            "Ollama has no models yet. Run: ollama pull qwen2.5:7b")
+                return
+            want = self.cfg.llm.ollama_model
+            self.ol_model.names = models
+            self.ol_model.set_model(Gtk.StringList.new(models))
+            self.ol_model.set_selected(models.index(want) if want in models else 0)
+            _set_status(self.ol_row, self.ol_icon, True, f"{len(models)} model(s) found")
+            self.cl_next.set_sensitive(True)
+        _in_thread(lambda: ollama_models(url), done)
+
+    def _ai_next(self) -> None:
+        cfg = load_config()
+        if self.use_local.get_active():
+            cfg.llm.provider = "ollama"
+            cfg.llm.ollama_url = self.ol_url.get_text().strip()
+            cfg.llm.ollama_model = self.ol_model.names[self.ol_model.get_selected()]
+        else:
+            cfg.llm.provider = "anthropic"
+        save_config(cfg)
+        self._next()
 
     def _claude_check(self) -> None:
         import anthropic
