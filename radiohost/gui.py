@@ -40,6 +40,7 @@ CONTACT_LINKS = [
     ("Check for updates", "Latest releases and what's new", f"{REPO}/releases"),
 ]
 CREDITS = [
+    ("Made with", "Vibecoded: designed by Matyáš Závora, code written by Claude (Claude Code)"),
     ("Facts", "Wikipedia and MusicBrainz"),
     ("Voices", "Google Cloud Text-to-Speech and Piper"),
     ("Scripts", "Claude by Anthropic, or Ollama"),

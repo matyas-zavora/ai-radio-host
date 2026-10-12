@@ -28,6 +28,10 @@ with real facts about the song and the artist. Then the music carries on.
   the song, the next song starts quietly under the voice, and the music fades
   back up (see [Talking over the music](#talking-over-the-music)).
 
+> **Vibecoded.** This app was built through conversation with an AI: I designed it,
+> made the decisions and tried it out, and Claude wrote the code and the tests. See
+> [How this was made](#how-this-was-made).
+
 ## Requirements
 
 - Linux with PipeWire or PulseAudio
@@ -234,6 +238,8 @@ and [`.env.example`](.env.example) for every option, if you prefer editing files
   the most tested player.
 - If you change the queue in the last few seconds before a break, the host can
   introduce the wrong song.
+- How the "talk over the music" fades sound with real music hasn't been tuned
+  by ear much yet.
 
 ## Development
 
@@ -260,6 +266,23 @@ instead of `~/.config/ai-radio-host/`.
 | `radiohost/audio.py` | Playing the clip |
 | `radiohost/gui.py`, `setup_wizard.py`, `tray.py` | The app, the wizard, the tray icon |
 | `radiohost/config.py` | Settings and keys |
+
+## How this was made
+
+AI Radio Host is a **vibecoded** project. I described what I wanted, made the
+design decisions and tried things out on my own setup, and
+[Claude](https://claude.com/claude-code) (Anthropic's AI, in Claude Code) wrote
+the code, the tests and most of this README, step by step in one long
+conversation. Every commit made this way says so (`Co-Authored-By: Claude`).
+
+What that means for you:
+
+- **It's tested, but not everything.** Automated tests run on every change
+  (Python 3.11–3.14), and the main features were tried on a real setup (Arch
+  Linux, Spotifast). What hasn't been tried by a person yet is listed under
+  [Known limitations](#known-limitations).
+- **Bugs are likely.** Reports are very welcome and help a lot.
+- **The code is all here.** Read it, check it, improve it.
 
 ## Feedback
 
