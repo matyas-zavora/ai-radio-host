@@ -6,3 +6,5 @@ config.toml
 /voices/
 *.wav
 *.egg-info/
+build/
+dist/

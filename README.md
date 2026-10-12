@@ -54,6 +54,28 @@ resumes.
 | Spotify 429 / expired token | It backs off by `Retry-After`. Tokens refresh automatically. |
 | Facts, LLM or TTS fail | The break is skipped silently and the music keeps going. If Google TTS fails or hits its budget, Piper is used. |
 
+## Install
+
+Requires Linux, Spotifast, PipeWire/PulseAudio and, on Arch,
+`sudo pacman -S python-gobject gtk4 libadwaita`.
+
+```bash
+# the repo is private, so download with the GitHub CLI (gh auth login once)
+gh release download --repo matyas-zavora/ai-radio-host --pattern 'ai-radio-host-*.tar.gz'
+tar xzf ai-radio-host-*.tar.gz && cd ai-radio-host-*/
+./install.sh
+```
+
+This installs into `~/.local/share/ai-radio-host`, adds `radiohost` and
+`radiohost-gui` to `~/.local/bin`, adds **AI Radio Host** to your launcher, and
+creates `~/.config/ai-radio-host/config.toml` and `.env` (mode 600). To update,
+run a newer release's `./install.sh`; your settings are kept.
+`./install.sh --uninstall` removes the app but keeps your settings.
+
+An installed copy reads `config.toml` and `.env` from `~/.config/ai-radio-host/`.
+A source checkout (for development) reads them from the project folder.
+Then continue with the accounts below (from step 2).
+
 ## Setup
 
 ### 1. Install

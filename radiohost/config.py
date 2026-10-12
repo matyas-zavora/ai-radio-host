@@ -10,6 +10,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
+DEV = (PROJECT_DIR / "pyproject.toml").exists()   # running from a source checkout
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "ai-radio-host"
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "ai-radio-host"
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "ai-radio-host"
@@ -88,10 +89,13 @@ def _apply(obj, data: dict, prefix: str = "") -> None:
 
 
 def load_config(path: Path | None = None) -> Config:
-    load_dotenv(PROJECT_DIR / ".env")
-    load_dotenv()  # also ./.env when run from elsewhere; never overrides
+    # Source checkout: files next to the code win. Installed: ~/.config/ai-radio-host/.
+    if DEV:
+        load_dotenv(PROJECT_DIR / ".env")
+    load_dotenv(CONFIG_DIR / ".env")  # never overrides what's already set
 
-    candidates = [path] if path else [PROJECT_DIR / "config.toml", CONFIG_DIR / "config.toml"]
+    candidates = [path] if path else (
+        [PROJECT_DIR / "config.toml"] if DEV else []) + [CONFIG_DIR / "config.toml"]
     cfg = Config()
     for p in candidates:
         if p and p.exists():
@@ -141,7 +145,8 @@ def _toml_value(v) -> str:
 
 def save_config(cfg: Config, path: Path | None = None) -> Path:
     """Write every setting to config.toml (comments are not kept; see config.example.toml)."""
-    path = path or cfg.source or PROJECT_DIR / "config.toml"
+    path = path or cfg.source or (PROJECT_DIR if DEV else CONFIG_DIR) / "config.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
     t = cfg.tts
     sections = {
         "break": vars(cfg.brk),

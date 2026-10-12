@@ -16,7 +16,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from .audio import AudioError, ClipPlayer  # noqa: E402
-from .config import LANGUAGES, Config, load_config, save_config  # noqa: E402
+from .config import CONFIG_DIR, DEV, LANGUAGES, PROJECT_DIR, Config, load_config, save_config  # noqa: E402
 from .spotify_api import NotAuthorized, SpotifyClient  # noqa: E402
 from . import voices as voice_catalog  # noqa: E402
 
@@ -417,7 +417,8 @@ class Window(Adw.ApplicationWindow):
             g.add(w)
         page.add(g)
 
-        g = Adw.PreferencesGroup(title="Accounts", description="Keys live in .env in the project folder.")
+        env_file = (PROJECT_DIR if DEV else CONFIG_DIR) / ".env"
+        g = Adw.PreferencesGroup(title="Accounts", description=f"Keys live in {env_file}")
         self.acc_spotify = Adw.ActionRow(title="Spotify")
         self.acc_login = Gtk.Button(label="Log in", valign=Gtk.Align.CENTER)
         self.acc_login.connect("clicked", self._spotify_login)

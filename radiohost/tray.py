@@ -17,7 +17,9 @@ log = logging.getLogger(__name__)
 
 ITEM_PATH = "/StatusNotifierItem"
 MENU_PATH = "/MenuBar"
-ICON_DIR = Path(__file__).resolve().parent.parent / "data" / "icons"
+# Installed copies get the icons in ~/.local/share/icons (install.sh); a checkout uses data/.
+_DEV_ICONS = Path(__file__).resolve().parent.parent / "data" / "icons"
+ICON_DIR = _DEV_ICONS if _DEV_ICONS.exists() else ""
 ICONS = {"off": "ai-radio-host-off", "on": "ai-radio-host-on", "live": "ai-radio-host-live"}
 
 SNI_XML = """
