@@ -43,6 +43,62 @@ class HostConfig:
     language: str = "en"
     name: str = ""
     personality: str = DEFAULT_PERSONALITY
+    # Saved hosts, name -> personality. The active host (name above) is always one of them.
+    profiles: dict[str, str] = field(default_factory=dict)
+    # Each host's own voice per language: language -> {host name -> voice}.
+    voices: dict[str, dict[str, str]] = field(default_factory=dict)
+
+
+def select_host(host: HostConfig, name: str) -> None:
+    """Make a saved host the active one."""
+    host.name, host.personality = name, host.profiles[name]
+
+
+def update_host(host: HostConfig, name: str, personality: str) -> None:
+    """Rename / edit the active host, keeping its place in the list."""
+    if name != host.name and name in host.profiles:
+        raise ValueError(f"A host named \"{name}\" already exists.")
+    host.profiles = {(name if k == host.name else k): (personality if k == host.name else v)
+                     for k, v in host.profiles.items()}
+    host.voices = {lang: {(name if k == host.name else k): v for k, v in by_host.items()}
+                   for lang, by_host in host.voices.items()}
+    host.name, host.personality = name, personality
+
+
+def add_host(host: HostConfig, name: str, personality: str) -> None:
+    """Save a new host and make it the active one."""
+    if not name:
+        raise ValueError("Give the new host a name.")
+    if name in host.profiles:
+        raise ValueError(f"A host named \"{name}\" already exists.")
+    host.profiles[name] = personality
+    select_host(host, name)
+
+
+def delete_host(host: HostConfig, name: str) -> None:
+    """Delete a saved host; if it was active, the first remaining one becomes active."""
+    if len(host.profiles) <= 1:
+        raise ValueError("Can't delete the only host.")
+    del host.profiles[name]
+    for by_host in host.voices.values():
+        by_host.pop(name, None)
+    if name == host.name:
+        select_host(host, next(iter(host.profiles)))
+
+
+def switch_host(cfg: "Config", name: str) -> None:
+    """Make a saved host active, with its own voices (a language it has no voice for keeps
+    the current one)."""
+    select_host(cfg.host, name)
+    for lang, by_host in cfg.host.voices.items():
+        if by_host.get(name):
+            cfg.tts.voices[lang] = by_host[name]
+
+
+def _remember_host_voices(cfg: "Config") -> None:
+    """The voices in use belong to the active host."""
+    for lang in LANGUAGES:
+        cfg.host.voices.setdefault(lang, {})[cfg.host.name] = cfg.tts.voice_for(lang)
 
 
 @dataclass
@@ -129,6 +185,8 @@ def load_config(path: Path | None = None) -> Config:
             data = tomllib.loads(p.read_text())
             _apply(cfg.brk, data.get("break", {}), "break.")
             _apply(cfg.host, data.get("host", {}), "host.")
+            cfg.host.profiles = dict(cfg.host.profiles)
+            cfg.host.voices = {lang: dict(v) for lang, v in cfg.host.voices.items()}
             _apply(cfg.llm, data.get("llm", {}), "llm.")
             _apply(cfg.player, data.get("player", {}), "player.")
             _apply(cfg.updates, data.get("updates", {}), "updates.")
@@ -155,6 +213,8 @@ def load_config(path: Path | None = None) -> Config:
             cfg.source = p
             break
 
+    # Old configs have no saved hosts: the active host becomes the first one.
+    cfg.host.profiles[cfg.host.name] = cfg.host.personality
     cfg.spotify_client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
     if cfg.host.language not in LANGUAGES:
         raise ValueError(f"host.language must be one of {list(LANGUAGES)}")
@@ -177,10 +237,13 @@ def save_config(cfg: Config, path: Path | None = None) -> Path:
     """Write every setting to config.toml (comments are not kept; see config.example.toml)."""
     path = path or cfg.source or (PROJECT_DIR if DEV else CONFIG_DIR) / "config.toml"
     path.parent.mkdir(parents=True, exist_ok=True)
+    _remember_host_voices(cfg)
     t = cfg.tts
     sections = {
         "break": vars(cfg.brk),
-        "host": vars(cfg.host),
+        "host": {k: v for k, v in vars(cfg.host).items() if k not in ("profiles", "voices")},
+        "host.profiles": cfg.host.profiles,
+        **{f"host.voices.{lang}": by_host for lang, by_host in cfg.host.voices.items()},
         "llm": vars(cfg.llm),
         "tts": {"provider": t.provider, "fallback": t.fallback},
         "tts.voices": {lang: t.voice_for(lang) for lang in LANGUAGES},
@@ -196,7 +259,8 @@ def save_config(cfg: Config, path: Path | None = None) -> Path:
     lines = ["# Written by the AI Radio Host app. All options: config.example.toml", ""]
     for name, values in sections.items():
         lines.append(f"[{name}]")
-        lines += [f"{k} = {_toml_value(v)}" for k, v in values.items()]
+        lines += [f"{k if re.fullmatch(r'[A-Za-z0-9_-]+', k) else _toml_value(k)} = {_toml_value(v)}"
+                  for k, v in values.items()]
         lines.append("")
     path.write_text("\n".join(lines))
     cfg.source = path

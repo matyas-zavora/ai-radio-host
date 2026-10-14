@@ -12,7 +12,7 @@ from typing import Callable
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from .config import (CONFIG_DIR, LANGUAGES, env_file, load_config, save_config, set_env,
-                     voice_engine)
+                     select_host, update_host, voice_engine)
 from .spotify_api import NotAuthorized, SpotifyClient
 
 SPOTIFY_DASHBOARD = "https://developer.spotify.com/dashboard"
@@ -352,7 +352,7 @@ class SetupWizard(Adw.Dialog):
                                  model=Gtk.StringList.new([LANGUAGES[c] for c in codes]))
         self.lang.set_selected(codes.index(self.cfg.host.language))
         self.lang.codes = codes
-        self.name = Adw.EntryRow(title="Host name (optional)", text=self.cfg.host.name or "Felix Moon")
+        self.name = Adw.EntryRow(title="Host name (optional)", text=self.cfg.host.name)
         g.add(self.lang)
         g.add(self.name)
         pp.add(g)
@@ -422,7 +422,11 @@ class SetupWizard(Adw.Dialog):
     def _finish(self) -> None:
         cfg = load_config()
         cfg.host.language = self.lang.codes[self.lang.get_selected()]
-        cfg.host.name = self.name.get_text().strip()
+        name = self.name.get_text().strip()
+        if name in cfg.host.profiles:
+            select_host(cfg.host, name)
+        else:
+            update_host(cfg.host, name, cfg.host.personality)
         google = self.v_google.get_active() and self.google_key_ok
         cfg.tts.provider = "google" if google else "piper"
         cfg.tts.fallback = "piper"

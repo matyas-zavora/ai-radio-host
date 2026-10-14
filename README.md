@@ -284,7 +284,7 @@ after 3 minutes and says what to check. Still stuck?
 | Tab | What it's for |
 |---|---|
 | **On Air** | The studio sign: grey **OFF**; green **READY** while waiting, with how many songs are left or a countdown to the break; red pulsing **ON AIR** while the host talks, with the time left. Also the on-air and dry-run switches, **Break after this song**, the current song, and the recent scripts (▶ replays one). |
-| **Host** | Everything about the host, applied immediately: language, name, personality; the **script writer** (Claude Sonnet 5, Haiku 4.5, Opus 5, or a local Ollama model); the **voice** (volume with a ▶ test, and all Google and Piper voices for the language with ▶ samples). Each language keeps its own voice. |
+| **Host** | Everything about the host, applied immediately: language, name, personality, and saved **hosts** (pick one from the list to switch name, personality and voice together; **New Host…** creates another); the **script writer** (Claude Sonnet 5, Haiku 4.5, Opus 5, or a local Ollama model); the **voice** (volume with a ▶ test, and all Google and Piper voices for the language with ▶ samples). Each language keeps its own voice. |
 | **Settings** | Breaks (how often, the transition, music volume while talking, length, when a skipped song still counts), advanced options, accounts, **Run setup again**, and **Reset everything**. |
 | **Log** | What the app is doing, including the full text of every break and why a break was skipped. |
 | **Contact** | Version, links to the project page, bug reports, ideas (in Discussions) and updates, **Copy system info** for bug reports, and credits. |

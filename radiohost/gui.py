@@ -17,8 +17,9 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
 from .audio import AudioError, ClipPlayer  # noqa: E402
-from .config import (CONFIG_DIR, DEV, LANGUAGES, PROJECT_DIR, Config, load_config,  # noqa: E402
-                     save_config, voice_engine)
+from .config import (CONFIG_DIR, DEFAULT_PERSONALITY, DEV, LANGUAGES, PROJECT_DIR, Config,  # noqa: E402
+                     add_host, delete_host, load_config, save_config, switch_host, update_host,
+                     voice_engine)
 from .spotify_api import NotAuthorized, SpotifyClient  # noqa: E402
 from . import voices as voice_catalog  # noqa: E402
 from .tts import wav_seconds  # noqa: E402
@@ -144,6 +145,7 @@ class Window(Adw.ApplicationWindow):
         self.set_default_size(760, 820)
         self.cfg: Config = load_config()
         self.clip: ClipPlayer | None = None
+        self._sample_playing, self._sample_gen = False, 0   # voice samples, stopped on switching
         self.history_rows: list[Gtk.Widget] = []
         self.history_len = 0
 
@@ -155,6 +157,7 @@ class Window(Adw.ApplicationWindow):
         stack.add_titled_with_icon(self._build_log(), "log", "Log", "utilities-terminal-symbolic")
         stack.add_titled_with_icon(self._build_contact(), "contact", "Contact", "help-about-symbolic")
         self.toasts.set_child(stack)
+        stack.connect("notify::visible-child", lambda *_: self._stop_sample())
 
         header = Adw.HeaderBar()
         header.set_title_widget(Adw.ViewSwitcher(stack=stack, policy=Adw.ViewSwitcherPolicy.WIDE))
@@ -180,6 +183,7 @@ class Window(Adw.ApplicationWindow):
             self.lang.set_selected(self.lang.items.index(self.cfg.host.language))
             self.h_name.set_text(self.cfg.host.name)
             self.h_personality.set_text(self.cfg.host.personality)
+            self._fill_hosts()
             self._load_ollama_models()
             self._load_voices()
             if go_on_air and not self.app.running:
@@ -449,11 +453,19 @@ class Window(Adw.ApplicationWindow):
             self.history_rows.append(row)
         self.history_len = len(entries)
 
-    def _play(self, path: Path) -> None:
+    def _play(self, path: Path, sample: bool = False) -> None:
         clip = self._clip()
         if clip:
             clip.start(path)
             self.clip_ends_at = time.monotonic() + wav_seconds(path)
+            self._sample_playing = sample
+
+    def _stop_sample(self) -> None:
+        """Stop a voice sample (not a replayed break), including one still being made."""
+        self._sample_gen += 1
+        if self._sample_playing and self.clip is not None:
+            self.clip.stop()
+            self._sample_playing = False
 
     # ---------- Contact ----------
 
@@ -697,16 +709,64 @@ class Window(Adw.ApplicationWindow):
         c = self.cfg
         page = Adw.PreferencesPage()
 
-        g = Adw.PreferencesGroup(title="Host", description="Changes apply right away.")
-        self.lang = _combo("Language", LANG_CODES, c.host.language,
-                           [LANGUAGES[x] for x in LANG_CODES])
-        self.lang.connect("notify::selected", lambda *_: self._on_lang_changed())
+        # 1. which host is on air
+        g = Adw.PreferencesGroup(title="Hosts", description="Each host has their own name, "
+                                                             "personality and voice.")
+        self._filling = True
+        # a plain DropDown, not a ComboRow: ComboRow hides its arrow with a single host
+        self.h_drop = Gtk.DropDown(valign=Gtk.Align.CENTER)
+        self.h_drop.connect("notify::selected", lambda *_: self._on_host_changed())
+        self.h_host = Adw.ActionRow(title="Host")
+        self.h_host.add_prefix(Gtk.Image(icon_name="avatar-default-symbolic"))
+        self.h_host.add_suffix(self.h_drop)
+        h_new = Adw.ButtonRow(title="New Host…", start_icon_name="list-add-symbolic")
+        h_new.connect("activated", lambda *_: self._new_host_dialog())
+        for w in (self.h_host, h_new):
+            g.add(w)
+        page.add(g)
+
+        # 2. the selected host: everything here belongs to them (the title is their name)
+        self.g_host = g = Adw.PreferencesGroup()
         self.h_name = Adw.EntryRow(title="Name (optional)", text=c.host.name, show_apply_button=True)
         self.h_name.connect("apply", lambda *_: self._save_host_text())
         self.h_personality = Adw.EntryRow(title="Personality", text=c.host.personality,
                                           show_apply_button=True)
         self.h_personality.connect("apply", lambda *_: self._save_host_text())
-        for w in (self.lang, self.h_name, self.h_personality):
+        self.voice_row = Adw.ActionRow(title="Voice")
+        self.voice_row.add_prefix(Gtk.Image(icon_name="audio-input-microphone-symbolic"))
+        self.exp_google = Adw.ExpanderRow(title="Natural voices", subtitle="Google · free tier")
+        self.exp_piper = Adw.ExpanderRow(title="Local voices", subtitle="Piper · offline, more robotic")
+        self.h_delete = Adw.ButtonRow(title="Delete Host", start_icon_name="user-trash-symbolic",
+                                      css_classes=["destructive-action"])
+        self.h_delete.connect("activated", lambda *_: self._confirm_delete_host())
+        for w in (self.h_name, self.h_personality, self.voice_row, self.exp_google, self.exp_piper,
+                  self.h_delete):
+            g.add(w)
+        page.add(g)
+        self._fill_hosts()
+
+        # 3. shared by every host
+        g = Adw.PreferencesGroup(title="All hosts", description="The same for every host.")
+        self.lang = _combo("Language", LANG_CODES, c.host.language,
+                           [LANGUAGES[x] for x in LANG_CODES])
+        self.lang.connect("notify::selected", lambda *_: self._on_lang_changed())
+        self.volume = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
+        self.volume.set_value(c.audio_volume)
+        self.volume.set_size_request(200, -1)
+        self.volume.set_valign(Gtk.Align.CENTER)
+        self.volume.set_draw_value(True)
+        self.volume.set_value_pos(Gtk.PositionType.RIGHT)
+        self.volume.set_format_value_func(lambda _s, v: f"{v:.0f} %")
+        self.volume.connect("value-changed", self._on_volume)
+        self._volume_save = 0
+        vol_row = Adw.ActionRow(title="Voice volume")
+        vol_row.add_prefix(Gtk.Image(icon_name="audio-volume-high-symbolic"))
+        vol_row.add_suffix(self.volume)
+        self.test_btn = Gtk.Button(icon_name="media-playback-start-symbolic", valign=Gtk.Align.CENTER,
+                                   css_classes=["flat"], tooltip_text="Play a sample at this volume")
+        self.test_btn.connect("clicked", self._test_voice)
+        vol_row.add_suffix(self.test_btn)
+        for w in (self.lang, vol_row):
             g.add(w)
         page.add(g)
 
@@ -718,30 +778,6 @@ class Window(Adw.ApplicationWindow):
         self._fill_writer([])
         self._load_ollama_models()
 
-        g = Adw.PreferencesGroup(title="Voice", description="Tick a voice to use it, ▶ to hear it. "
-                                                             "Each language keeps its own voice.")
-        self.volume = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
-        self.volume.set_value(c.audio_volume)
-        self.volume.set_size_request(200, -1)
-        self.volume.set_valign(Gtk.Align.CENTER)
-        self.volume.set_draw_value(True)
-        self.volume.set_value_pos(Gtk.PositionType.RIGHT)
-        self.volume.set_format_value_func(lambda _s, v: f"{v:.0f} %")
-        self.volume.connect("value-changed", self._on_volume)
-        self._volume_save = 0
-        self.voice_row = Adw.ActionRow(title="Current voice")
-        self.voice_row.add_prefix(Gtk.Image(icon_name="audio-volume-high-symbolic"))
-        self.voice_row.add_suffix(self.volume)
-        self.test_btn = Gtk.Button(icon_name="media-playback-start-symbolic", valign=Gtk.Align.CENTER,
-                                   css_classes=["flat"], tooltip_text="Play a sample at this volume")
-        self.test_btn.connect("clicked", self._test_voice)
-        self.voice_row.add_suffix(self.test_btn)
-        g.add(self.voice_row)
-        self.exp_google = Adw.ExpanderRow(title="Natural voices", subtitle="Google · free tier")
-        self.exp_piper = Adw.ExpanderRow(title="Local voices", subtitle="Piper · offline, more robotic")
-        g.add(self.exp_google)
-        g.add(self.exp_piper)
-        page.add(g)
         self.v_rows: dict[Adw.ExpanderRow, list] = {self.exp_google: [], self.exp_piper: []}
         self._radio: Gtk.CheckButton | None = None
         self._load_voices()
@@ -769,11 +805,108 @@ class Window(Adw.ApplicationWindow):
     def _save_host_text(self) -> None:
         name = self.h_name.get_text().strip()
         personality = self.h_personality.get_text().strip()
+        try:
+            self._update_and_apply(
+                lambda c: update_host(c.host, name, personality or c.host.personality), "Host saved.")
+        except ValueError as e:
+            self.toast(str(e))
+        self._fill_hosts()
 
-        def change(c):
-            c.host.name = name
-            c.host.personality = personality or c.host.personality
-        self._update_and_apply(change, "Host saved.")
+    # saved hosts: the selector switches name + personality together
+
+    def _fill_hosts(self) -> None:
+        host = self.cfg.host
+        self._filling = True
+        self.h_drop.items = list(host.profiles)
+        self.h_drop.set_model(Gtk.StringList.new([n or "Unnamed host" for n in host.profiles]))
+        self.h_drop.set_selected(self.h_drop.items.index(host.name))
+        self.h_delete.set_sensitive(len(host.profiles) > 1)
+        label = host.name or "Unnamed host"
+        self.g_host.set_title(label)
+        self.g_host.set_description(f"Changes apply right away. Tick a voice for {label}, ▶ to hear "
+                                    "it; each language keeps its own voice.")
+        self._filling = False
+
+    def _show_host(self) -> None:
+        self.h_name.set_text(self.cfg.host.name)
+        self.h_personality.set_text(self.cfg.host.personality)
+        self._fill_hosts()
+
+    def _on_host_changed(self) -> None:
+        if self._filling:
+            return
+        self._stop_sample()
+        name = self.h_drop.items[self.h_drop.get_selected()]
+        if name == load_config().host.name:
+            return
+        self._update_and_apply(lambda c: switch_host(c, name),
+                               f"Host: {name or 'Unnamed host'}.")
+        # Not now: replacing the dropdown's model inside its own selection signal crashes GTK.
+        GLib.idle_add(lambda: (self._show_host(), self._load_voices()) and False)
+
+    def _new_host_dialog(self) -> None:
+        name = Adw.EntryRow(title="Name")
+        names = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["boxed-list"])
+        names.append(name)
+        # a personality is a few sentences: give it a real multi-line box
+        text = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=10, bottom_margin=10,
+                            left_margin=12, right_margin=12, css_classes=["card"])
+        text.get_buffer().set_text(DEFAULT_PERSONALITY)
+        scroll = Gtk.ScrolledWindow(child=text, min_content_height=150, max_content_height=300,
+                                    propagate_natural_height=True,
+                                    hscrollbar_policy=Gtk.PolicyType.NEVER)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, width_request=520)
+        box.append(names)
+        box.append(Gtk.Label(label="Personality", xalign=0, css_classes=["heading"]))
+        box.append(scroll)
+        dialog = Adw.AlertDialog(heading="New Host", prefer_wide_layout=True, extra_child=box,
+                                 body="Give the host a name, and describe how they talk.")
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("create", "Create")
+        dialog.set_response_appearance("create", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_response_enabled("create", False)
+        dialog.set_close_response("cancel")
+        name.connect("changed", lambda *_: dialog.set_response_enabled(
+            "create", bool(name.get_text().strip())))
+
+        def on_response(_d, response):
+            if response == "create":
+                buf = text.get_buffer()
+                self._new_host(name.get_text().strip(),
+                               buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).strip())
+        dialog.connect("response", on_response)
+        dialog.present(self)
+        name.grab_focus()
+
+    def _new_host(self, name: str, personality: str) -> None:
+        try:
+            self._update_and_apply(
+                lambda c: add_host(c.host, name, personality or DEFAULT_PERSONALITY),
+                f"New host: {name}.")
+        except ValueError as e:
+            self.toast(str(e))
+            return
+        self._show_host()
+
+    def _confirm_delete_host(self) -> None:
+        name = load_config().host.name
+        dialog = Adw.AlertDialog(heading=f"Delete host {name or 'Unnamed host'}?",
+                                 body="Its name and personality will be gone.")
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("delete", "Delete")
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+        dialog.connect("response", lambda _d, r: r == "delete" and self._delete_host(name))
+        dialog.present(self)
+
+    def _delete_host(self, name: str) -> None:
+        try:
+            self._update_and_apply(lambda c: delete_host(c.host, name), "Host deleted.")
+        except ValueError as e:
+            self.toast(str(e))
+            return
+        self._show_host()
 
     # script writer: one list of Claude models and local Ollama models
 
@@ -902,6 +1035,7 @@ class Window(Adw.ApplicationWindow):
         if voice.provider == "piper" and "MB download" in voice.detail:
             self.toast(f"Downloading {voice.label}…")
         tts_cfg = self.cfg.tts
+        gen = self._sample_gen
 
         def work():
             try:
@@ -915,8 +1049,8 @@ class Window(Adw.ApplicationWindow):
                 btn.set_sensitive(True)
                 if err:
                     self.toast(f"Preview failed: {err[:120]}")
-                else:
-                    self._play(path)
+                elif gen == self._sample_gen:   # not cancelled meanwhile
+                    self._play(path, sample=True)
                 return False
             GLib.idle_add(done)
         threading.Thread(target=work, daemon=True).start()
