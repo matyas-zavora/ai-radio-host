@@ -712,6 +712,9 @@ class Window(Adw.ApplicationWindow):
         self.h_host.set_model(Gtk.StringList.new([n or "Unnamed host" for n in host.profiles]))
         self.h_host.set_selected(self.h_host.items.index(host.name))
         self.h_delete.set_sensitive(len(host.profiles) > 1)
+        # libadwaita hides the dropdown arrow with a single item; say how to get more
+        self.h_host.set_subtitle("" if len(host.profiles) > 1 else
+                                 "Save as New Host to add another, then switch here")
         self._filling = False
 
     def _show_host(self) -> None:
