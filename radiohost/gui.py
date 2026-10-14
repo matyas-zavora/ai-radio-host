@@ -307,12 +307,18 @@ class Window(Adw.ApplicationWindow):
         g.add(box)
         page.add(g)
 
-        g = Adw.PreferencesGroup(description="Voice, language and AI model: Host tab.")
+        g = Adw.PreferencesGroup(description="Edit hosts, voices, language and AI model on the Host tab.")
         self.onair = Adw.SwitchRow(title="On air", subtitle="Off")
         self.onair.connect("notify::active", self._on_onair_toggled)
         self.dryrun = Adw.SwitchRow(title="Dry run",
                                     subtitle="Only write scripts: no speech, no pausing")
+        # quick host switch; the same list as on the Host tab
+        self.oa_drop = Gtk.DropDown(valign=Gtk.Align.CENTER)
+        self.oa_drop.connect("notify::selected", lambda d, _p: self._on_host_changed(d))
+        host_row = Adw.ActionRow(title="Host")
+        host_row.add_suffix(self.oa_drop)
         g.add(self.onair)
+        g.add(host_row)
         g.add(self.dryrun)
         page.add(g)
 
@@ -715,7 +721,7 @@ class Window(Adw.ApplicationWindow):
         self._filling = True
         # a plain DropDown, not a ComboRow: ComboRow hides its arrow with a single host
         self.h_drop = Gtk.DropDown(valign=Gtk.Align.CENTER)
-        self.h_drop.connect("notify::selected", lambda *_: self._on_host_changed())
+        self.h_drop.connect("notify::selected", lambda d, _p: self._on_host_changed(d))
         self.h_host = Adw.ActionRow(title="Host")
         self.h_host.add_prefix(Gtk.Image(icon_name="avatar-default-symbolic"))
         self.h_host.add_suffix(self.h_drop)
@@ -817,9 +823,11 @@ class Window(Adw.ApplicationWindow):
     def _fill_hosts(self) -> None:
         host = self.cfg.host
         self._filling = True
-        self.h_drop.items = list(host.profiles)
-        self.h_drop.set_model(Gtk.StringList.new([n or "Unnamed host" for n in host.profiles]))
-        self.h_drop.set_selected(self.h_drop.items.index(host.name))
+        names = Gtk.StringList.new([n or "Unnamed host" for n in host.profiles])
+        for drop in (self.h_drop, self.oa_drop):
+            drop.items = list(host.profiles)
+            drop.set_model(names)
+            drop.set_selected(drop.items.index(host.name))
         self.h_delete.set_sensitive(len(host.profiles) > 1)
         label = host.name or "Unnamed host"
         self.g_host.set_title(label)
@@ -832,11 +840,11 @@ class Window(Adw.ApplicationWindow):
         self.h_personality.set_text(self.cfg.host.personality)
         self._fill_hosts()
 
-    def _on_host_changed(self) -> None:
+    def _on_host_changed(self, drop: Gtk.DropDown) -> None:
         if self._filling:
             return
         self._stop_sample()
-        name = self.h_drop.items[self.h_drop.get_selected()]
+        name = drop.items[drop.get_selected()]
         if name == load_config().host.name:
             return
         self._update_and_apply(lambda c: switch_host(c, name),
