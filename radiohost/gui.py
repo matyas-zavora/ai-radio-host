@@ -145,6 +145,8 @@ class Window(Adw.ApplicationWindow):
         self.set_default_size(760, 820)
         self.cfg: Config = load_config()
         self.clip: ClipPlayer | None = None
+        self.vol_adj: Gtk.Adjustment | None = None   # shared by the volume sliders
+        self._volume_save = 0
         self._sample_playing, self._sample_gen = False, 0   # voice samples, stopped on switching
         self.history_rows: list[Gtk.Widget] = []
         self.history_len = 0
@@ -317,8 +319,11 @@ class Window(Adw.ApplicationWindow):
         self.oa_drop.connect("notify::selected", lambda d, _p: self._on_host_changed(d))
         host_row = Adw.ActionRow(title="Host")
         host_row.add_suffix(self.oa_drop)
+        vol_row = Adw.ActionRow(title="Voice volume")
+        vol_row.add_suffix(self._volume_scale())
         g.add(self.onair)
         g.add(host_row)
+        g.add(vol_row)
         g.add(self.dryrun)
         page.add(g)
 
@@ -756,15 +761,7 @@ class Window(Adw.ApplicationWindow):
         self.lang = _combo("Language", LANG_CODES, c.host.language,
                            [LANGUAGES[x] for x in LANG_CODES])
         self.lang.connect("notify::selected", lambda *_: self._on_lang_changed())
-        self.volume = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 5)
-        self.volume.set_value(c.audio_volume)
-        self.volume.set_size_request(200, -1)
-        self.volume.set_valign(Gtk.Align.CENTER)
-        self.volume.set_draw_value(True)
-        self.volume.set_value_pos(Gtk.PositionType.RIGHT)
-        self.volume.set_format_value_func(lambda _s, v: f"{v:.0f} %")
-        self.volume.connect("value-changed", self._on_volume)
-        self._volume_save = 0
+        self.volume = self._volume_scale()
         vol_row = Adw.ActionRow(title="Voice volume")
         vol_row.add_prefix(Gtk.Image(icon_name="audio-volume-high-symbolic"))
         vol_row.add_suffix(self.volume)
@@ -1068,6 +1065,17 @@ class Window(Adw.ApplicationWindow):
         lang = self._lang()
         name = cfg.tts.voice_for(lang)
         self._preview(btn, voice_catalog.Voice(voice_engine(name), name, name, ""), lang)
+
+    def _volume_scale(self) -> Gtk.Scale:
+        """A volume slider; every slider shares one adjustment, so they move together."""
+        if self.vol_adj is None:
+            self.vol_adj = Gtk.Adjustment(value=self.cfg.audio_volume, lower=0, upper=100,
+                                          step_increment=5, page_increment=10)
+            self.vol_adj.connect("value-changed", self._on_volume)
+        scale = Gtk.Scale(adjustment=self.vol_adj, width_request=200, valign=Gtk.Align.CENTER,
+                          draw_value=True, value_pos=Gtk.PositionType.RIGHT)
+        scale.set_format_value_func(lambda _s, v: f"{v:.0f} %")
+        return scale
 
     def _on_volume(self, scale) -> None:
         v = int(round(scale.get_value()))
