@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 
 from radiohost.config import BreakConfig, HostConfig, LLMConfig
@@ -34,3 +36,8 @@ def test_unknown_or_unfillable_placeholder_fails():
         writer().fill("Here's {album}.", NEXT, None)
     with pytest.raises(ScriptError):
         writer().fill("That was {prev_song}.", NEXT, None)   # no previous song known
+
+
+def test_prompt_has_local_time():
+    prompt = writer().build_prompt(Facts([]), has_previous=False, now=datetime(2026, 10, 16, 21, 4))
+    assert "Friday 21:04 (evening)" in prompt

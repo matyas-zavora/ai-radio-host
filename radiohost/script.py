@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from datetime import datetime
 
 import anthropic
 import httpx
@@ -102,9 +103,15 @@ class ScriptWriter:
                             "second half, like a DJ talking over an intro.\n")
 
     @staticmethod
-    def build_prompt(facts: Facts, has_previous: bool) -> str:
-        """The user message. Contains no Spotify data: only facts and placeholders."""
-        parts = ["NEXT SONG\nRefer to it as {song} by {artist}."]
+    def build_prompt(facts: Facts, has_previous: bool, now: datetime | None = None) -> str:
+        """The user message. Contains no Spotify data: only facts, placeholders and the time."""
+        now = now or datetime.now()
+        part = ("night" if now.hour < 5 else "morning" if now.hour < 12 else
+                "afternoon" if now.hour < 17 else "evening" if now.hour < 22 else "night")
+        parts = [f"LOCAL TIME\n{now:%A %H:%M} ({part}). If you greet the listener or mention the "
+                 "time of day, match this, even if your personality describes another time of day: "
+                 "keep the personality's style, not its clock.",
+                 "NEXT SONG\nRefer to it as {song} by {artist}."]
         if has_previous:
             parts.append("SONG THAT JUST FINISHED\nYou may mention it in passing as {prev_song} "
                          "by {prev_artist}. Say nothing else about it.")
