@@ -695,7 +695,25 @@ class Window(Adw.ApplicationWindow):
     def _save_host_text(self) -> None:
         name = self.h_name.get_text().strip()
         personality = self.h_personality.get_text().strip()
+        current = load_config().host.name
+        if name and current and name != current and name not in self.cfg.host.profiles:
+            # a new name is ambiguous: rename this host, or add another one?
+            dialog = Adw.AlertDialog(heading=f"Rename {current} or add a new host?",
+                                     body=f"Rename {current} to {name}, or keep {current} and "
+                                          f"save {name} as a new host.")
+            dialog.add_response("cancel", "Cancel")
+            dialog.add_response("rename", "Rename")
+            dialog.add_response("new", "Save as New Host")
+            dialog.set_response_appearance("new", Adw.ResponseAppearance.SUGGESTED)
+            dialog.set_close_response("cancel")
+            dialog.connect("response", lambda _d, r: self._new_host() if r == "new" else
+                           self._rename_host(name, personality) if r == "rename" else
+                           self._show_host())
+            dialog.present(self)
+            return
+        self._rename_host(name, personality)
 
+    def _rename_host(self, name: str, personality: str) -> None:
         try:
             self._update_and_apply(
                 lambda c: update_host(c.host, name, personality or c.host.personality), "Host saved.")
