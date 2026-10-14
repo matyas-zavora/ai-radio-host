@@ -18,6 +18,12 @@ language = "en"           # "en" or "cs"; override per run with --lang
 name = ""                 # optional on-air name
 personality = "a warm late-night radio DJ: relaxed and smooth, a little witty, talks like a friend keeping the listener company"
 
+# Saved hosts (name = personality), picked in the app under Host → Host.
+# The active host above is always one of them; the app adds it if it's missing.
+# [host.profiles]
+# "Felix Moon" = "a warm late-night radio DJ: relaxed and smooth, a little witty"
+# "Nora" = "an upbeat morning host: quick, cheerful, loves a bad pun"
+
 [llm]
 provider = "anthropic"    # anthropic (Claude API) | ollama (local model, free)
 model = "claude-sonnet-5"

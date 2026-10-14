@@ -18,7 +18,8 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
 from .audio import AudioError, ClipPlayer  # noqa: E402
 from .config import (CONFIG_DIR, DEV, LANGUAGES, PROJECT_DIR, Config, load_config,  # noqa: E402
-                     save_config, voice_engine)
+                     add_host, delete_host, save_config, select_host, update_host,
+                     voice_engine)
 from .spotify_api import NotAuthorized, SpotifyClient  # noqa: E402
 from . import voices as voice_catalog  # noqa: E402
 from .tts import wav_seconds  # noqa: E402
@@ -178,6 +179,7 @@ class Window(Adw.ApplicationWindow):
             self.lang.set_selected(self.lang.items.index(self.cfg.host.language))
             self.h_name.set_text(self.cfg.host.name)
             self.h_personality.set_text(self.cfg.host.personality)
+            self._fill_hosts()
             self._load_ollama_models()
             self._load_voices()
             if go_on_air and not self.app.running:
@@ -617,14 +619,22 @@ class Window(Adw.ApplicationWindow):
         self.lang = _combo("Language", LANG_CODES, c.host.language,
                            [LANGUAGES[x] for x in LANG_CODES])
         self.lang.connect("notify::selected", lambda *_: self._on_lang_changed())
+        self._filling = True
+        self.h_host = Adw.ComboRow(title="Host")
+        self.h_host.connect("notify::selected", lambda *_: self._on_host_changed())
         self.h_name = Adw.EntryRow(title="Name (optional)", text=c.host.name, show_apply_button=True)
         self.h_name.connect("apply", lambda *_: self._save_host_text())
         self.h_personality = Adw.EntryRow(title="Personality", text=c.host.personality,
                                           show_apply_button=True)
         self.h_personality.connect("apply", lambda *_: self._save_host_text())
-        for w in (self.lang, self.h_name, self.h_personality):
+        h_new = Adw.ButtonRow(title="Save as New Host", start_icon_name="list-add-symbolic")
+        h_new.connect("activated", lambda *_: self._new_host())
+        self.h_delete = Adw.ButtonRow(title="Delete Host", start_icon_name="user-trash-symbolic")
+        self.h_delete.connect("activated", lambda *_: self._confirm_delete_host())
+        for w in (self.lang, self.h_host, self.h_name, self.h_personality, h_new, self.h_delete):
             g.add(w)
         page.add(g)
+        self._fill_hosts()
 
         g = Adw.PreferencesGroup(title="Script writer", description="The AI that writes what the host says.")
         self.writer = Adw.ComboRow(title="Model")
@@ -686,10 +696,70 @@ class Window(Adw.ApplicationWindow):
         name = self.h_name.get_text().strip()
         personality = self.h_personality.get_text().strip()
 
-        def change(c):
-            c.host.name = name
-            c.host.personality = personality or c.host.personality
-        self._update_and_apply(change, "Host saved.")
+        try:
+            self._update_and_apply(
+                lambda c: update_host(c.host, name, personality or c.host.personality), "Host saved.")
+        except ValueError as e:
+            self.toast(str(e))
+        self._fill_hosts()
+
+    # saved hosts: the selector switches name + personality together
+
+    def _fill_hosts(self) -> None:
+        host = self.cfg.host
+        self._filling = True
+        self.h_host.items = list(host.profiles)
+        self.h_host.set_model(Gtk.StringList.new([n or "Unnamed host" for n in host.profiles]))
+        self.h_host.set_selected(self.h_host.items.index(host.name))
+        self.h_delete.set_sensitive(len(host.profiles) > 1)
+        self._filling = False
+
+    def _show_host(self) -> None:
+        self.h_name.set_text(self.cfg.host.name)
+        self.h_personality.set_text(self.cfg.host.personality)
+        self._fill_hosts()
+
+    def _on_host_changed(self) -> None:
+        if self._filling:
+            return
+        name = self.h_host.items[self.h_host.get_selected()]
+        if name == load_config().host.name:
+            return
+        self._update_and_apply(lambda c: select_host(c.host, name),
+                               f"Host: {name or 'Unnamed host'}.")
+        self._show_host()
+
+    def _new_host(self) -> None:
+        name = self.h_name.get_text().strip()
+        personality = self.h_personality.get_text().strip()
+        try:
+            self._update_and_apply(
+                lambda c: add_host(c.host, name, personality or c.host.personality),
+                f"Saved new host {name}.")
+        except ValueError as e:
+            self.toast(str(e))
+            return
+        self._show_host()
+
+    def _confirm_delete_host(self) -> None:
+        name = load_config().host.name
+        dialog = Adw.AlertDialog(heading=f"Delete host {name or 'Unnamed host'}?",
+                                 body="Its name and personality will be gone.")
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("delete", "Delete")
+        dialog.set_response_appearance("delete", Adw.ResponseAppearance.DESTRUCTIVE)
+        dialog.set_default_response("cancel")
+        dialog.set_close_response("cancel")
+        dialog.connect("response", lambda _d, r: r == "delete" and self._delete_host(name))
+        dialog.present(self)
+
+    def _delete_host(self, name: str) -> None:
+        try:
+            self._update_and_apply(lambda c: delete_host(c.host, name), "Host deleted.")
+        except ValueError as e:
+            self.toast(str(e))
+            return
+        self._show_host()
 
     # script writer: one list of Claude models and local Ollama models
 
