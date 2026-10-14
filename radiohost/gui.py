@@ -733,22 +733,35 @@ class Window(Adw.ApplicationWindow):
 
     def _new_host_dialog(self) -> None:
         name = Adw.EntryRow(title="Name")
-        personality = Adw.EntryRow(title="Personality", text=DEFAULT_PERSONALITY)
-        fields = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["boxed-list"])
-        fields.append(name)
-        fields.append(personality)
-        dialog = Adw.AlertDialog(heading="New Host", body="Give the host a name and a personality.",
-                                 extra_child=fields)
+        names = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["boxed-list"])
+        names.append(name)
+        # a personality is a few sentences: give it a real multi-line box
+        text = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, top_margin=10, bottom_margin=10,
+                            left_margin=12, right_margin=12, css_classes=["card"])
+        text.get_buffer().set_text(DEFAULT_PERSONALITY)
+        scroll = Gtk.ScrolledWindow(child=text, min_content_height=150, max_content_height=300,
+                                    propagate_natural_height=True,
+                                    hscrollbar_policy=Gtk.PolicyType.NEVER)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, width_request=520)
+        box.append(names)
+        box.append(Gtk.Label(label="Personality", xalign=0, css_classes=["heading"]))
+        box.append(scroll)
+        dialog = Adw.AlertDialog(heading="New Host", prefer_wide_layout=True, extra_child=box,
+                                 body="Give the host a name, and describe how they talk.")
         dialog.add_response("cancel", "Cancel")
         dialog.add_response("create", "Create")
         dialog.set_response_appearance("create", Adw.ResponseAppearance.SUGGESTED)
         dialog.set_response_enabled("create", False)
-        dialog.set_default_response("create")
         dialog.set_close_response("cancel")
         name.connect("changed", lambda *_: dialog.set_response_enabled(
             "create", bool(name.get_text().strip())))
-        dialog.connect("response", lambda _d, r: r == "create" and self._new_host(
-            name.get_text().strip(), personality.get_text().strip()))
+
+        def on_response(_d, response):
+            if response == "create":
+                buf = text.get_buffer()
+                self._new_host(name.get_text().strip(),
+                               buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).strip())
+        dialog.connect("response", on_response)
         dialog.present(self)
         name.grab_focus()
 
