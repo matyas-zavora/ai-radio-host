@@ -21,11 +21,11 @@ personality = "a warm late-night radio DJ: relaxed and smooth, a little witty, t
 # Saved hosts (name = personality), picked in the app under Host → Host.
 # The active host above is always one of them; the app adds it if it's missing.
 # [host.profiles]
-# "Felix Moon" = "a warm late-night radio DJ: relaxed and smooth, a little witty"
+# "Alex" = "a warm late-night radio DJ: relaxed and smooth, a little witty"
 # "Nora" = "an upbeat morning host: quick, cheerful, loves a bad pun"
 # Each host's voice per language (the app fills this in when you pick a voice):
 # [host.voices.en]
-# "Felix Moon" = "en-US-Chirp3-HD-Charon"
+# "Alex" = "en-US-Chirp3-HD-Charon"
 # "Nora" = "en-US-Chirp3-HD-Achernar"
 
 [llm]

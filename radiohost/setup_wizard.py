@@ -352,7 +352,7 @@ class SetupWizard(Adw.Dialog):
                                  model=Gtk.StringList.new([LANGUAGES[c] for c in codes]))
         self.lang.set_selected(codes.index(self.cfg.host.language))
         self.lang.codes = codes
-        self.name = Adw.EntryRow(title="Host name (optional)", text=self.cfg.host.name or "Felix Moon")
+        self.name = Adw.EntryRow(title="Host name (optional)", text=self.cfg.host.name)
         g.add(self.lang)
         g.add(self.name)
         pp.add(g)
