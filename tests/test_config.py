@@ -1,7 +1,7 @@
 import pytest
 
 from radiohost.config import (Config, HostConfig, TTSConfig, add_host, delete_host, load_config,
-                              save_config, select_host, update_host, voice_engine)
+                              save_config, select_host, switch_host, update_host, voice_engine)
 
 
 def test_voice_engine():
@@ -60,3 +60,23 @@ def test_select_update_delete_hosts():
     assert (h.name, h.personality, h.profiles) == ("A", "a", {"A": "a"})
     with pytest.raises(ValueError):
         delete_host(h, "A")                        # never delete the last host
+
+
+def test_each_host_keeps_its_own_voice(tmp_path):
+    path = tmp_path / "config.toml"
+    cfg = Config()
+    cfg.host.name, cfg.host.personality = "Sunny", "upbeat"
+    cfg.host.profiles = {"Sunny": "upbeat"}
+    cfg.tts.voices["en"] = "en-US-Chirp3-HD-Achernar"
+    save_config(cfg, path)                              # Sunny gets Achernar
+    add_host(cfg.host, "Felix", "calm")
+    cfg.tts.voices["en"] = "en_US-ryan-high"
+    save_config(cfg, path)                              # Felix gets Ryan
+    cfg = load_config(path)
+    switch_host(cfg, "Sunny")
+    assert cfg.tts.voices["en"] == "en-US-Chirp3-HD-Achernar"
+    update_host(cfg.host, "Sunny Brooks", "upbeat")     # renaming keeps the voice
+    delete_host(cfg.host, "Felix")
+    save_config(cfg, path)
+    cfg = load_config(path)
+    assert cfg.host.voices["en"] == {"Sunny Brooks": "en-US-Chirp3-HD-Achernar"}

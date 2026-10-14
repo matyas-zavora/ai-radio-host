@@ -18,7 +18,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
 from .audio import AudioError, ClipPlayer  # noqa: E402
 from .config import (CONFIG_DIR, DEFAULT_PERSONALITY, DEV, LANGUAGES, PROJECT_DIR, Config,  # noqa: E402
-                     add_host, delete_host, load_config, save_config, select_host, update_host,
+                     add_host, delete_host, load_config, save_config, switch_host, update_host,
                      voice_engine)
 from .spotify_api import NotAuthorized, SpotifyClient  # noqa: E402
 from . import voices as voice_catalog  # noqa: E402
@@ -727,10 +727,10 @@ class Window(Adw.ApplicationWindow):
         name = self.h_drop.items[self.h_drop.get_selected()]
         if name == load_config().host.name:
             return
-        self._update_and_apply(lambda c: select_host(c.host, name),
+        self._update_and_apply(lambda c: switch_host(c, name),
                                f"Host: {name or 'Unnamed host'}.")
         # Not now: replacing the dropdown's model inside its own selection signal crashes GTK.
-        GLib.idle_add(lambda: self._show_host() and False)
+        GLib.idle_add(lambda: (self._show_host(), self._load_voices()) and False)
 
     def _new_host_dialog(self) -> None:
         name = Adw.EntryRow(title="Name")
