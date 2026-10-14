@@ -168,6 +168,8 @@ class Window(Adw.ApplicationWindow):
         from .setup_wizard import setup_needed
         if setup_needed():
             GLib.idle_add(lambda: self.open_setup() and False)
+        else:
+            self._check_updates()
 
     def open_setup(self) -> None:
         from .setup_wizard import SetupWizard
@@ -184,6 +186,84 @@ class Window(Adw.ApplicationWindow):
                 self.dryrun.set_active(False)
                 self.onair.set_active(True)
         SetupWizard(finished).present(self)
+
+    # ---------- updates ----------
+
+    def _check_updates(self) -> None:
+        from . import updates
+        cfg, current = self.cfg, app_version()
+
+        def work():
+            try:
+                rel = updates.check(cfg, current)
+            except Exception as e:  # noqa: BLE001 - offline is normal
+                log.info("Update check failed: %s", e)
+                return
+            if rel:
+                GLib.idle_add(lambda: self._offer_update(rel) and False)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _offer_update(self, rel) -> None:
+        from . import updates
+        mode = updates.install_mode()
+        notes = rel.notes if len(rel.notes) <= 600 else rel.notes[:600].rsplit(" ", 1)[0] + "…"
+        dialog = Adw.AlertDialog(
+            heading=f"AI Radio Host {rel.version} is available",
+            body=f"You have {app_version()}. Your settings and keys are kept.\n\n{notes}".strip())
+        dialog.add_response("later", "Later")
+        dialog.add_response("skip", "Skip This Version")
+        if mode == "unknown":
+            dialog.add_response("open", "Open Release Page")
+            dialog.set_response_appearance("open", Adw.ResponseAppearance.SUGGESTED)
+        else:
+            dialog.add_response("update", "Update Now")
+            dialog.set_response_appearance("update", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_close_response("later")
+
+        def on_response(_d, response):
+            if response == "skip":
+                cfg = load_config()
+                cfg.updates.skip_version = rel.version
+                save_config(cfg)
+            elif response == "open":
+                Gtk.UriLauncher.new(rel.url).launch(self, None, None, None)
+            elif response == "update":
+                self._run_update(rel, mode)
+        dialog.connect("response", on_response)
+        dialog.present(self)
+
+    def _run_update(self, rel, mode: str) -> None:
+        from . import updates
+        busy = Adw.Toast(title=f"Updating to {rel.version}…", timeout=0)
+        self.toasts.add_toast(busy)
+
+        def work():
+            try:
+                msg, err = updates.perform_update(rel, mode), None
+            except Exception as e:  # noqa: BLE001
+                msg, err = None, str(e)
+            GLib.idle_add(lambda: (busy.dismiss(), self._update_done(rel, msg, err)) and False)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _update_done(self, rel, msg: str | None, err: str | None) -> None:
+        if err:
+            log.error("Update failed: %s", err)
+            dialog = Adw.AlertDialog(heading="Update failed", body=err)
+            dialog.add_response("close", "Close")
+            dialog.add_response("open", "Open Release Page")
+            dialog.connect("response", lambda _d, r: r == "open" and Gtk.UriLauncher.new(
+                rel.url).launch(self, None, None, None))
+        else:
+            log.info(msg)
+            on_air = "\n\nIf the host is talking, the restart waits until it's done." \
+                if self.app.running else ""
+            dialog = Adw.AlertDialog(heading=f"Updated to {rel.version}",
+                                     body=f"{msg} Restart the app to use it.{on_air}")
+            dialog.add_response("later", "Later")
+            dialog.add_response("restart", "Restart Now")
+            dialog.set_response_appearance("restart", Adw.ResponseAppearance.SUGGESTED)
+            dialog.connect("response", lambda _d, r: r == "restart" and self.app.restart())
+        dialog.present(self)
 
     def toast(self, text: str) -> None:
         self.toasts.add_toast(Adw.Toast.new(GLib.markup_escape_text(text)))
@@ -489,7 +569,10 @@ class Window(Adw.ApplicationWindow):
         self.s_budget = _spin("Google monthly limit", 0, 4_000_000, 50_000,
                               c.tts.google_monthly_char_limit, "characters (free tier: 1M for Chirp 3 HD)")
         self.s_ollama_url = Adw.EntryRow(title="Ollama server (for local models)", text=c.llm.ollama_url)
-        for w in (self.s_fallback, self.s_budget, self.s_ollama_url):
+        self.s_updates = Adw.SwitchRow(title="Check for updates when the app opens",
+                                       subtitle="Asks GitHub for the latest release",
+                                       active=c.updates.check)
+        for w in (self.s_fallback, self.s_budget, self.s_ollama_url, self.s_updates):
             g.add(w)
         page.add(g)
 
@@ -604,6 +687,7 @@ class Window(Adw.ApplicationWindow):
             c.tts.fallback = "piper" if self.s_fallback.get_active() else ""
             c.tts.google_monthly_char_limit = int(self.s_budget.get_value())
             c.llm.ollama_url = self.s_ollama_url.get_text().strip() or c.llm.ollama_url
+            c.updates.check = self.s_updates.get_active()
         self._update_and_apply(change, "Settings saved.")
         self._load_ollama_models()
 
@@ -904,6 +988,7 @@ class App(Adw.Application):
         self.tray = None
         self.log_handler: GuiLogHandler | None = None
         self._restart_pending = False
+        self.relaunch = False
 
     @property
     def running(self) -> bool:
@@ -1014,6 +1099,15 @@ class App(Adw.Application):
             log.info("Applied new settings")
         return False
 
+    def restart(self) -> bool:
+        """Quit and start again (after an update), but never cut the host off mid-sentence."""
+        if self.running and self.host.talking is not None:
+            GLib.timeout_add(500, self.restart)
+            return False
+        self.relaunch = True
+        self.quit_all()
+        return False
+
     def run_in_background(self) -> None:
         if not self.held:
             self.hold()
@@ -1062,7 +1156,11 @@ def main() -> int:
             logging.getLogger(noisy).setLevel(logging.WARNING)
     app = App()
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, lambda: app.quit_all() or False)
-    return app.run([sys.argv[0]])
+    code = app.run([sys.argv[0]])
+    if app.relaunch:
+        from .updates import relaunch
+        relaunch()
+    return code
 
 
 if __name__ == "__main__":

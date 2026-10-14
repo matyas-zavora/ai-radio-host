@@ -85,12 +85,19 @@ class PlayerConfig:
 
 
 @dataclass
+class UpdatesConfig:
+    check: bool = True             # look for a new GitHub release when the app opens
+    skip_version: str = ""         # "Skip This Version" remembers it here
+
+
+@dataclass
 class Config:
     brk: BreakConfig = field(default_factory=BreakConfig)
     host: HostConfig = field(default_factory=HostConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
     player: PlayerConfig = field(default_factory=PlayerConfig)
+    updates: UpdatesConfig = field(default_factory=UpdatesConfig)
     audio_command: str = ""        # "" = auto (pw-play, paplay, mpv, afplay)
     audio_volume: int = 100        # host voice volume, 0-100 %
     spotify_client_id: str = ""
@@ -124,6 +131,7 @@ def load_config(path: Path | None = None) -> Config:
             _apply(cfg.host, data.get("host", {}), "host.")
             _apply(cfg.llm, data.get("llm", {}), "llm.")
             _apply(cfg.player, data.get("player", {}), "player.")
+            _apply(cfg.updates, data.get("updates", {}), "updates.")
             tts = dict(data.get("tts", {}))
             google = tts.pop("google", {})
             piper = tts.pop("piper", {})
@@ -183,6 +191,7 @@ def save_config(cfg: Config, path: Path | None = None) -> Path:
         "player": vars(cfg.player),
         "audio": {"command": cfg.audio_command, "volume": cfg.audio_volume},
         "spotify": {"redirect_uri": cfg.spotify_redirect_uri},
+        "updates": vars(cfg.updates),
     }
     lines = ["# Written by the AI Radio Host app. All options: config.example.toml", ""]
     for name, values in sections.items():

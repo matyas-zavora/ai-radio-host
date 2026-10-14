@@ -54,3 +54,7 @@ volume = 100              # host voice volume in %, ignored with a custom comman
 
 [spotify]
 redirect_uri = "http://127.0.0.1:8888/callback"   # must match the Spotify app exactly
+
+[updates]
+check = true              # look for a new release on GitHub when the app opens (offers to install it)
+skip_version = ""         # set by "Skip This Version"; no prompt for this version
