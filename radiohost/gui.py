@@ -189,7 +189,6 @@ class Window(Adw.ApplicationWindow):
             self._load_ollama_models()
             self._load_voices()
             if go_on_air and not self.app.running:
-                self.dryrun.set_active(False)
                 self.onair.set_active(True)
         SetupWizard(finished).present(self)
 
@@ -312,8 +311,6 @@ class Window(Adw.ApplicationWindow):
         g = Adw.PreferencesGroup(description="Edit hosts, voices, language and AI model on the Host tab.")
         self.onair = Adw.SwitchRow(title="On air", subtitle="Off")
         self.onair.connect("notify::active", self._on_onair_toggled)
-        self.dryrun = Adw.SwitchRow(title="Dry run",
-                                    subtitle="Only write scripts: no speech, no pausing")
         # quick host switch; the same list as on the Host tab
         self.oa_drop = Gtk.DropDown(valign=Gtk.Align.CENTER)
         self.oa_drop.connect("notify::selected", lambda d, _p: self._on_host_changed(d))
@@ -324,7 +321,6 @@ class Window(Adw.ApplicationWindow):
         g.add(self.onair)
         g.add(host_row)
         g.add(vol_row)
-        g.add(self.dryrun)
         page.add(g)
 
         g = Adw.PreferencesGroup(title="Now")
@@ -345,13 +341,12 @@ class Window(Adw.ApplicationWindow):
     def _on_onair_toggled(self, row, _pspec):
         if row.get_active() and not self.app.running:
             self.cfg = load_config()
-            error = self.app.start_host(self.cfg, self.dryrun.get_active())
+            error = self.app.start_host(self.cfg)
             if error:
                 self.toast(error)
                 row.set_active(False)
         elif not row.get_active() and self.app.running:
             self.app.stop_host()
-        self.dryrun.set_sensitive(not row.get_active())
 
     def _update_sign(self, host, running: bool) -> None:
         talking = host.talking if (host is not None and running) else None
@@ -363,7 +358,7 @@ class Window(Adw.ApplicationWindow):
             elif running:
                 st = host.last_state
                 now = f"\n{st.track}" if st and st.track else ""
-                self.app.tray.update("on", ("Dry run" if host.dry_run else "On air") + now)
+                self.app.tray.update("on", "On air" + now)
             else:
                 self.app.tray.update("off", "Off air")
         state = "live" if lit else "ready" if running else "off"
@@ -392,8 +387,6 @@ class Window(Adw.ApplicationWindow):
             caption = f"Introducing {talking}"
         elif replaying:
             caption = "Playing a sample"
-        elif running and host.dry_run:
-            caption = "Dry run: the host only writes scripts"
         elif running:
             caption = "Waiting for the next break. The sign turns red when the host talks."
         else:
@@ -421,8 +414,7 @@ class Window(Adw.ApplicationWindow):
         if not running:
             self.onair.set_subtitle("Off")
         else:
-            self.onair.set_subtitle("Dry run: writing scripts only" if host.dry_run
-                                    else "Breaks are on")
+            self.onair.set_subtitle("Breaks are on")
 
         if host is not None:
             st = host.last_state
@@ -1243,7 +1235,7 @@ class App(Adw.Application):
         old = self.host
         old.stop()
         self.thread.join(timeout=5)
-        error = self.start_host(load_config(), old.dry_run)
+        error = self.start_host(load_config())
         self._restart_pending = False
         if error:
             log.error("Couldn't apply the change: %s", error)
@@ -1268,10 +1260,10 @@ class App(Adw.Application):
             self.hold()
             self.held = True
 
-    def start_host(self, cfg: Config, dry_run: bool) -> str | None:
+    def start_host(self, cfg: Config) -> str | None:
         from .__main__ import build_host
         try:
-            self.host = build_host(cfg, dry_run)
+            self.host = build_host(cfg, dry_run=False)   # dry runs: `radiohost run --dry-run`
         except (NotAuthorized, ValueError, AudioError) as e:
             return str(e)
         self.host.history = self.history
