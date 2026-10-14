@@ -104,6 +104,19 @@ AI Radio Host may control Spotify: allow it.
 **Uninstall:** `brew uninstall ai-radio-host` and delete the app from Applications. Your
 settings in `~/.config/ai-radio-host/` are kept.
 
+### Updates
+
+Each time the app opens, it asks GitHub whether a newer release is out. If so, it
+offers to install it: **Update Now**, **Later** or **Skip This Version**. Your settings,
+keys and Spotify login in `~/.config/ai-radio-host/` stay where they are.
+
+- **Installed with `install.sh`:** downloads the release and runs its `install.sh`.
+- **macOS (Homebrew):** runs `brew upgrade ai-radio-host`. The app in Applications keeps working.
+- **Git checkout:** runs `git pull --ff-only` and reinstalls, only on a clean `main` branch.
+
+Then **Restart Now** reopens the app. If the host is mid-break, the restart waits for it to finish.
+To stop checking, turn off **Settings → Advanced → Check for updates when the app opens**.
+
 ## First start
 
 Open **AI Radio Host**. A setup wizard walks you through three steps and saves
@@ -318,6 +331,7 @@ voice about halfway through, and the music fades back up afterwards.
 | **Wikipedia, MusicBrainz** | Searches for the song title and artist. |
 | **Anthropic** (or your local Ollama) | Only the Wikipedia/MusicBrainz facts and the host's instructions. **No Spotify data**: the AI writes `{song}`/`{artist}` placeholders that the app fills in locally, because Spotify's terms forbid feeding Spotify content (including song metadata) into AI models. |
 | **Google Cloud TTS** (if used) | The text of the break, to turn it into speech. |
+| **GitHub** | One request for the latest release when the app opens (can be turned off in Settings → Advanced). |
 
 Keys are stored in `~/.config/ai-radio-host/.env` (readable only by you). The
 app has no server of its own and collects nothing.
