@@ -149,7 +149,7 @@ class Window(Adw.ApplicationWindow):
         self._volume_save = 0
         self._sample_playing, self._sample_gen = False, 0   # voice samples, stopped on switching
         self.history_rows: list[Gtk.Widget] = []
-        self.history_len = 0
+        self.history_len = (0, 0)
 
         self.toasts = Adw.ToastOverlay()
         stack = Adw.ViewStack()
@@ -338,7 +338,7 @@ class Window(Adw.ApplicationWindow):
         page.add(g)
 
         self.history_group = Adw.PreferencesGroup(
-            title="Recent breaks", description="Newest first. Scripts appear here as they are written.")
+            title="Breaks", description="Every break since the app opened, newest first.")
         page.add(self.history_group)
         return page
 
@@ -440,8 +440,10 @@ class Window(Adw.ApplicationWindow):
             self.row_count.set_subtitle(f"{min(host.counter, n)} / {n} songs")
             status = host.plan_status() or ("—" if host.counter + 1 < n else "waiting…")
             self.row_next.set_subtitle(GLib.markup_escape_text(status))
-            if len(host.history) != self.history_len:
-                self._rebuild_history(list(host.history))
+        entries = list(self.app.history)
+        # rebuild on a new break, and when a break's audio is ready (adds its ▶ button)
+        if (len(entries), sum(bool(e["audio"]) for e in entries)) != self.history_len:
+            self._rebuild_history(entries)
         return True
 
     def _rebuild_history(self, entries: list[dict]) -> None:
@@ -449,10 +451,12 @@ class Window(Adw.ApplicationWindow):
             self.history_group.remove(row)
         self.history_rows = []
         for e in reversed(entries):
-            row = Adw.ActionRow(title=GLib.markup_escape_text(f"{e['time']} · {e['track']}"),
-                                subtitle=GLib.markup_escape_text(e["script"]))
+            songs = f"{e['previous']} → {e['track']}" if e.get("previous") else str(e["track"])
+            host = GLib.markup_escape_text(e.get("host") or "Unnamed host")
+            row = Adw.ActionRow(title=GLib.markup_escape_text(f"{e['time']} · {songs}"),
+                                subtitle=f"<b>{host}:</b> {GLib.markup_escape_text(e['script'])}")
             row.set_subtitle_lines(0)
-            row.set_title_lines(1)
+            row.set_title_lines(2)
             facts = Gtk.Label(label=f"{e['facts']} fact{'s' if e['facts'] != 1 else ''}", css_classes=["dim-label", "caption"])
             row.add_suffix(facts)
             if e.get("audio") and Path(e["audio"]).exists():
@@ -462,7 +466,7 @@ class Window(Adw.ApplicationWindow):
                 row.add_suffix(btn)
             self.history_group.add(row)
             self.history_rows.append(row)
-        self.history_len = len(entries)
+        self.history_len = (len(entries), sum(bool(e["audio"]) for e in entries))
 
     def _play(self, path: Path, sample: bool = False) -> None:
         clip = self._clip()
@@ -1133,6 +1137,7 @@ class App(Adw.Application):
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
         self.window: Window | None = None
         self.host = None
+        self.history: list[dict] = []   # every break since the app opened, across host restarts
         self.thread: threading.Thread | None = None
         self.held = False
         self.tray = None
@@ -1269,6 +1274,7 @@ class App(Adw.Application):
             self.host = build_host(cfg, dry_run)
         except (NotAuthorized, ValueError, AudioError) as e:
             return str(e)
+        self.host.history = self.history
 
         def run():
             try:

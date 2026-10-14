@@ -12,6 +12,8 @@ from pathlib import Path
 
 from .audio import ClipPlayer
 from .config import CACHE_DIR, Config
+
+SESSION_START = time.time()   # break clips from this run are kept until the next run
 from .ducking import Ducker
 from .facts import FactFinder
 from .models import PlayerState, Track
@@ -152,14 +154,15 @@ class RadioHost:
             log.debug("  fact: %s", f)
         script = self.writer.write(nxt, facts, previous)
         log.info("Script for %s (%d words):\n    %s", nxt, len(script.split()), script)
-        entry = {"time": time.strftime("%H:%M"), "track": nxt, "script": script,
+        entry = {"time": time.strftime("%H:%M"), "track": nxt, "previous": previous,
+                 "host": self.cfg.host.name, "script": script,
                  "facts": len(facts.items), "audio": None}
         self.history.append(entry)
         audio, seconds = None, len(script.split()) / 2.4
         if not self.dry_run:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            for old in CACHE_DIR.glob("break-*.wav"):
-                if time.time() - old.stat().st_mtime > 3600:
+            for old in CACHE_DIR.glob("break-*.wav"):   # clips left from earlier runs
+                if old.stat().st_mtime < SESSION_START:
                     old.unlink(missing_ok=True)
             audio = self.tts.synthesize(script, CACHE_DIR / f"break-{int(time.time() * 1000)}.wav")
             entry["audio"] = audio
