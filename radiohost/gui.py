@@ -729,7 +729,8 @@ class Window(Adw.ApplicationWindow):
             return
         self._update_and_apply(lambda c: select_host(c.host, name),
                                f"Host: {name or 'Unnamed host'}.")
-        self._show_host()
+        # Not now: replacing the dropdown's model inside its own selection signal crashes GTK.
+        GLib.idle_add(lambda: self._show_host() and False)
 
     def _new_host_dialog(self) -> None:
         name = Adw.EntryRow(title="Name")
