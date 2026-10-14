@@ -17,8 +17,8 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
 
 from .audio import AudioError, ClipPlayer  # noqa: E402
-from .config import (CONFIG_DIR, DEV, LANGUAGES, PROJECT_DIR, Config, load_config,  # noqa: E402
-                     add_host, delete_host, save_config, select_host, update_host,
+from .config import (CONFIG_DIR, DEFAULT_PERSONALITY, DEV, LANGUAGES, PROJECT_DIR, Config,  # noqa: E402
+                     add_host, delete_host, load_config, save_config, select_host, update_host,
                      voice_engine)
 from .spotify_api import NotAuthorized, SpotifyClient  # noqa: E402
 from . import voices as voice_catalog  # noqa: E402
@@ -620,15 +620,18 @@ class Window(Adw.ApplicationWindow):
                            [LANGUAGES[x] for x in LANG_CODES])
         self.lang.connect("notify::selected", lambda *_: self._on_lang_changed())
         self._filling = True
-        self.h_host = Adw.ComboRow(title="Host")
-        self.h_host.connect("notify::selected", lambda *_: self._on_host_changed())
+        # a plain DropDown, not a ComboRow: ComboRow hides its arrow with a single host
+        self.h_drop = Gtk.DropDown(valign=Gtk.Align.CENTER)
+        self.h_drop.connect("notify::selected", lambda *_: self._on_host_changed())
+        self.h_host = Adw.ActionRow(title="Host")
+        self.h_host.add_suffix(self.h_drop)
         self.h_name = Adw.EntryRow(title="Name (optional)", text=c.host.name, show_apply_button=True)
         self.h_name.connect("apply", lambda *_: self._save_host_text())
         self.h_personality = Adw.EntryRow(title="Personality", text=c.host.personality,
                                           show_apply_button=True)
         self.h_personality.connect("apply", lambda *_: self._save_host_text())
-        h_new = Adw.ButtonRow(title="Save as New Host", start_icon_name="list-add-symbolic")
-        h_new.connect("activated", lambda *_: self._new_host())
+        h_new = Adw.ButtonRow(title="New Host…", start_icon_name="list-add-symbolic")
+        h_new.connect("activated", lambda *_: self._new_host_dialog())
         self.h_delete = Adw.ButtonRow(title="Delete Host", start_icon_name="user-trash-symbolic")
         self.h_delete.connect("activated", lambda *_: self._confirm_delete_host())
         for w in (self.lang, self.h_host, self.h_name, self.h_personality, h_new, self.h_delete):
@@ -695,25 +698,6 @@ class Window(Adw.ApplicationWindow):
     def _save_host_text(self) -> None:
         name = self.h_name.get_text().strip()
         personality = self.h_personality.get_text().strip()
-        current = load_config().host.name
-        if name and current and name != current and name not in self.cfg.host.profiles:
-            # a new name is ambiguous: rename this host, or add another one?
-            dialog = Adw.AlertDialog(heading=f"Rename {current} or add a new host?",
-                                     body=f"Rename {current} to {name}, or keep {current} and "
-                                          f"save {name} as a new host.")
-            dialog.add_response("cancel", "Cancel")
-            dialog.add_response("rename", "Rename")
-            dialog.add_response("new", "Save as New Host")
-            dialog.set_response_appearance("new", Adw.ResponseAppearance.SUGGESTED)
-            dialog.set_close_response("cancel")
-            dialog.connect("response", lambda _d, r: self._new_host() if r == "new" else
-                           self._rename_host(name, personality) if r == "rename" else
-                           self._show_host())
-            dialog.present(self)
-            return
-        self._rename_host(name, personality)
-
-    def _rename_host(self, name: str, personality: str) -> None:
         try:
             self._update_and_apply(
                 lambda c: update_host(c.host, name, personality or c.host.personality), "Host saved.")
@@ -726,13 +710,10 @@ class Window(Adw.ApplicationWindow):
     def _fill_hosts(self) -> None:
         host = self.cfg.host
         self._filling = True
-        self.h_host.items = list(host.profiles)
-        self.h_host.set_model(Gtk.StringList.new([n or "Unnamed host" for n in host.profiles]))
-        self.h_host.set_selected(self.h_host.items.index(host.name))
+        self.h_drop.items = list(host.profiles)
+        self.h_drop.set_model(Gtk.StringList.new([n or "Unnamed host" for n in host.profiles]))
+        self.h_drop.set_selected(self.h_drop.items.index(host.name))
         self.h_delete.set_sensitive(len(host.profiles) > 1)
-        # libadwaita hides the dropdown arrow with a single item; say how to get more
-        self.h_host.set_subtitle("" if len(host.profiles) > 1 else
-                                 "Save as New Host to add another, then switch here")
         self._filling = False
 
     def _show_host(self) -> None:
@@ -743,20 +724,39 @@ class Window(Adw.ApplicationWindow):
     def _on_host_changed(self) -> None:
         if self._filling:
             return
-        name = self.h_host.items[self.h_host.get_selected()]
+        name = self.h_drop.items[self.h_drop.get_selected()]
         if name == load_config().host.name:
             return
         self._update_and_apply(lambda c: select_host(c.host, name),
                                f"Host: {name or 'Unnamed host'}.")
         self._show_host()
 
-    def _new_host(self) -> None:
-        name = self.h_name.get_text().strip()
-        personality = self.h_personality.get_text().strip()
+    def _new_host_dialog(self) -> None:
+        name = Adw.EntryRow(title="Name")
+        personality = Adw.EntryRow(title="Personality", text=DEFAULT_PERSONALITY)
+        fields = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, css_classes=["boxed-list"])
+        fields.append(name)
+        fields.append(personality)
+        dialog = Adw.AlertDialog(heading="New Host", body="Give the host a name and a personality.",
+                                 extra_child=fields)
+        dialog.add_response("cancel", "Cancel")
+        dialog.add_response("create", "Create")
+        dialog.set_response_appearance("create", Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_response_enabled("create", False)
+        dialog.set_default_response("create")
+        dialog.set_close_response("cancel")
+        name.connect("changed", lambda *_: dialog.set_response_enabled(
+            "create", bool(name.get_text().strip())))
+        dialog.connect("response", lambda _d, r: r == "create" and self._new_host(
+            name.get_text().strip(), personality.get_text().strip()))
+        dialog.present(self)
+        name.grab_focus()
+
+    def _new_host(self, name: str, personality: str) -> None:
         try:
             self._update_and_apply(
-                lambda c: add_host(c.host, name, personality or c.host.personality),
-                f"Saved new host {name}.")
+                lambda c: add_host(c.host, name, personality or DEFAULT_PERSONALITY),
+                f"New host: {name}.")
         except ValueError as e:
             self.toast(str(e))
             return
